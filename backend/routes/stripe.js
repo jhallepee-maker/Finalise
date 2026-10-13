@@ -19,8 +19,8 @@ router.post('/onboard', verifyJWT, async (req, res) => {
 
     const link = await stripe.accountLinks.create({
       account: account.id,
-      refresh_url: `${process.env.FRONTEND_URL}/dashboard?stripe=refresh`,
-      return_url:  `${process.env.FRONTEND_URL}/dashboard?stripe=ok`,
+      refresh_url: `${process.env.FRONTEND_URL}/?stripe=refresh`,
+      return_url:  `${process.env.FRONTEND_URL}/?stripe=ok`,
       type: 'account_onboarding',
     });
     res.json({ url: link.url });

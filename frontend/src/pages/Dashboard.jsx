@@ -27,7 +27,7 @@ export default function Dashboard() {
     if (params.get('stripe') === 'ok')   { setStripeMsg('✓ Compte Stripe connecté avec succès !'); refreshUser() }
     if (params.get('stripe') === 'refresh') setStripeMsg('Onboarding Stripe interrompu — veuillez recommencer.')
     // Nettoyer l'URL sans rechargement
-    if (params.get('stripe')) window.history.replaceState({}, '', '/dashboard')
+    if (params.get('stripe')) window.history.replaceState({}, '', '/')
 
     api.get('/api/devis')
       .then(r => setDevis(r.data))
