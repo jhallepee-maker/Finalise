@@ -77,7 +77,13 @@ router.get('/token/:token', async (req, res) => {
 router.get('/:id', verifyJWT, async (req, res) => {
   try {
     const { rows } = await db.query(
-      'SELECT * FROM devis WHERE id=$1 AND pro_id=$2',
+      `SELECT d.*,
+         to_json(p.*) AS paiement,
+         to_json(s.*) AS signature
+       FROM devis d
+       LEFT JOIN paiements p ON p.devis_id = d.id
+       LEFT JOIN signatures s ON s.devis_id = d.id
+       WHERE d.id=$1 AND d.pro_id=$2`,
       [req.params.id, req.user.id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
