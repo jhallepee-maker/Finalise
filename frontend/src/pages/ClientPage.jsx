@@ -57,6 +57,29 @@ function PaymentForm({ devis, onSuccess }) {
   )
 }
 
+// ─── Progress steps ──────────────────────────────────────
+function Steps({ current }) {
+  const steps = [
+    { key: 'view', label: 'Devis' },
+    { key: 'sign', label: 'Signature' },
+    { key: 'pay',  label: 'Paiement' },
+  ]
+  const idx = { view: 0, sign: 1, pay: 2, pay_pending: 2, done: 3 }
+  const cur = idx[current] ?? 0
+
+  return (
+    <div className="steps-bar">
+      {steps.map((s, i) => (
+        <div key={s.key} className={`step ${i < cur ? 'step-done' : i === cur ? 'step-active' : 'step-todo'}`}>
+          <div className="step-dot">{i < cur ? '✓' : i + 1}</div>
+          <div className="step-label">{s.label}</div>
+          {i < steps.length - 1 && <div className="step-line" />}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── Page principale ─────────────────────────────────────
 export default function ClientPage() {
   const { token } = useParams()
@@ -127,7 +150,12 @@ export default function ClientPage() {
     <div className="success-page">
       <div className="success-icon">✓</div>
       <h2>Paiement confirmé</h2>
-      <p>Vous recevrez une confirmation par email avec la preuve archivée.</p>
+      {devis && (
+        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.5px', fontVariantNumeric: 'tabular-nums', margin: '4px 0 8px' }}>
+          {fmt(devis.montant_ttc)}
+        </div>
+      )}
+      <p>Merci — votre paiement a bien été reçu. Une confirmation vous sera transmise par le prestataire.</p>
     </div>
   )
 
@@ -151,6 +179,8 @@ export default function ClientPage() {
           <div className="client-pro">Devis de {devis.pro_nom}{devis.activite ? ` · ${devis.activite}` : ''}</div>
         )}
       </div>
+
+      <Steps current={step} />
 
       {/* Récap devis */}
       <div className="card devis-card">

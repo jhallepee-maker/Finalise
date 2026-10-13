@@ -10,23 +10,48 @@ const LABELS = {
   expire:     'Expiré',
 }
 
-function fmt(n) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
+const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
+
+function StatTile({ label, value, sub, accent }) {
+  return (
+    <div style={{
+      flex: 1, minWidth: 0,
+      padding: '16px 18px',
+      background: 'var(--bg)',
+      border: '1px solid var(--border)',
+      borderRadius: 12,
+      boxShadow: 'var(--shadow)',
+    }}>
+      <div style={{ fontSize: 11, color: 'var(--fg3)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+        {label}
+      </div>
+      <div style={{
+        fontSize: 22,
+        fontWeight: 700,
+        letterSpacing: '-.5px',
+        fontVariantNumeric: 'tabular-nums',
+        color: accent || 'var(--fg)',
+      }}>
+        {value}
+      </div>
+      {sub && (
+        <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>{sub}</div>
+      )}
+    </div>
+  )
 }
 
 export default function Dashboard() {
   const { user, logout, refreshUser } = useAuth()
-  const [devis, setDevis]           = useState([])
-  const [loading, setLoading]       = useState(true)
+  const [devis, setDevis]             = useState([])
+  const [loading, setLoading]         = useState(true)
   const [stripeLoading, setStripeLoading] = useState(false)
-  const [stripeMsg, setStripeMsg]   = useState('')
+  const [stripeMsg, setStripeMsg]     = useState('')
 
   useEffect(() => {
-    // Retour depuis Stripe onboarding
     const params = new URLSearchParams(window.location.search)
-    if (params.get('stripe') === 'ok')   { setStripeMsg('✓ Compte Stripe connecté avec succès !'); refreshUser() }
+    if (params.get('stripe') === 'ok')      { setStripeMsg('✓ Compte Stripe connecté avec succès !'); refreshUser() }
     if (params.get('stripe') === 'refresh') setStripeMsg('Onboarding Stripe interrompu — veuillez recommencer.')
-    // Nettoyer l'URL sans rechargement
     if (params.get('stripe')) window.history.replaceState({}, '', '/')
 
     api.get('/api/devis')
@@ -45,6 +70,14 @@ export default function Dashboard() {
       setStripeLoading(false)
     }
   }
+
+  // Calcul des stats
+  const totalEncaisse = devis
+    .filter(d => d.statut === 'paye')
+    .reduce((s, d) => s + (d.montant_ttc || 0), 0)
+
+  const enAttente = devis.filter(d => d.statut === 'en_attente').length
+  const signes    = devis.filter(d => d.statut === 'signe').length
 
   return (
     <div className="page">
@@ -80,6 +113,28 @@ export default function Dashboard() {
         {stripeMsg && (
           <div className={`stripe-msg ${stripeMsg.startsWith('✓') ? 'stripe-msg-ok' : 'stripe-msg-warn'}`}>
             {stripeMsg}
+          </div>
+        )}
+
+        {/* Stats */}
+        {!loading && devis.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
+            <StatTile
+              label="Total encaissé"
+              value={fmt(totalEncaisse)}
+              accent={totalEncaisse > 0 ? 'var(--green)' : undefined}
+            />
+            <StatTile
+              label="En attente"
+              value={enAttente}
+              sub={enAttente === 1 ? 'devis à signer' : 'devis à signer'}
+            />
+            <StatTile
+              label="Signés"
+              value={signes}
+              sub={signes === 1 ? 'paiement attendu' : 'paiements attendus'}
+              accent={signes > 0 ? 'var(--amber)' : undefined}
+            />
           </div>
         )}
 

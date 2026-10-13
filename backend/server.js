@@ -1,7 +1,11 @@
 require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const app     = express();
+const express      = require('express');
+const cors         = require('cors');
+const runMigrations = require('./db/migrate');
+const app          = express();
+
+// Appliquer les migrations au démarrage
+runMigrations().catch(e => console.error('[migrate] erreur:', e.message));
 
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 

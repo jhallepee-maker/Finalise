@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import api from '../api'
 
 const LABELS = {
@@ -14,9 +14,12 @@ const fmtDateTime = s => new Date(s).toLocaleString('fr-FR', { day: '2-digit', m
 
 export default function DevisDetail() {
   const { id } = useParams()
-  const [devis, setDevis]   = useState(null)
-  const [copied, setCopied] = useState(false)
-  const [error, setError]   = useState('')
+  const nav = useNavigate()
+  const [devis, setDevis]         = useState(null)
+  const [copied, setCopied]       = useState(false)
+  const [error, setError]         = useState('')
+  const [deleting, setDeleting]   = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
 
   useEffect(() => {
     api.get(`/api/devis/${id}`)
@@ -61,9 +64,22 @@ export default function DevisDetail() {
     return `mailto:${to}?subject=${subject}&body=${body}`
   }
 
-  const isPaid   = devis.statut === 'paye'
-  const isSigned = devis.statut === 'signe' || isPaid
-  const isExpire = devis.statut === 'expire'
+  const isPaid    = devis.statut === 'paye'
+  const isSigned  = devis.statut === 'signe' || isPaid
+  const isExpire  = devis.statut === 'expire'
+  const isWaiting = devis.statut === 'en_attente'
+
+  const deleteDevis = async () => {
+    setDeleting(true)
+    try {
+      await api.delete(`/api/devis/${id}`)
+      nav('/')
+    } catch (err) {
+      setError(err.response?.data?.error || 'Erreur lors de la suppression')
+      setDeleting(false)
+      setConfirmDel(false)
+    }
+  }
 
   return (
     <div className="page">
@@ -153,6 +169,31 @@ export default function DevisDetail() {
             <div style={{ fontSize: 13, color: 'var(--fg2)' }}>
               {devis.signature.nom_signe} · {fmtDateTime(devis.signature.signe_at)}
             </div>
+          </div>
+        )}
+
+        {/* Suppression */}
+        {isWaiting && (
+          <div style={{ marginBottom: 16 }}>
+            {!confirmDel ? (
+              <button
+                className="btn btn-ghost"
+                style={{ color: 'var(--fg3)', fontSize: 13 }}
+                onClick={() => setConfirmDel(true)}
+              >
+                Supprimer ce devis
+              </button>
+            ) : (
+              <div className="card" style={{ borderColor: 'var(--red)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, flex: 1 }}>Supprimer définitivement ce devis ?</span>
+                <button className="btn btn-danger" onClick={deleteDevis} disabled={deleting} style={{ fontSize: 13, padding: '7px 14px' }}>
+                  {deleting ? 'Suppression…' : 'Confirmer'}
+                </button>
+                <button className="btn btn-ghost" onClick={() => setConfirmDel(false)} style={{ fontSize: 13 }}>
+                  Annuler
+                </button>
+              </div>
+            )}
           </div>
         )}
 

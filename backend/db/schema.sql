@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS devis (
 CREATE TABLE IF NOT EXISTS paiements (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   devis_id             UUID NOT NULL REFERENCES devis(id),
-  stripe_payment_intent VARCHAR(255),
+  stripe_payment_intent VARCHAR(255) UNIQUE,
   montant_ttc          NUMERIC(10,2),
   commission_joseph    NUMERIC(10,2),  -- 1%
   stripe_fees          NUMERIC(10,2),

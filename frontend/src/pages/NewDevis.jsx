@@ -2,13 +2,23 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import api from '../api'
 
+const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
+
+const EXPIRE_OPTIONS = [
+  { label: '7 jours',  value: 7 },
+  { label: '14 jours', value: 14 },
+  { label: '30 jours', value: 30 },
+  { label: '60 jours', value: 60 },
+]
+
 export default function NewDevis() {
   const nav = useNavigate()
   const [form, setForm] = useState({
     client_nom: '', client_email: '', client_tel: '',
     description: '', montant_ht: '', tva_pct: '20',
+    expire_days: '30',
   })
-  const [error, setError] = useState('')
+  const [error, setError]   = useState('')
   const [loading, setLoading] = useState(false)
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
@@ -17,7 +27,11 @@ export default function NewDevis() {
   const tva = parseFloat(form.tva_pct) || 0
   const ttc = ht * (1 + tva / 100)
 
-  const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
+  const expireLabel = (() => {
+    const days = parseInt(form.expire_days)
+    const d = new Date(Date.now() + days * 86400000)
+    return d.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+  })()
 
   const submit = async e => {
     e.preventDefault()
@@ -26,8 +40,9 @@ export default function NewDevis() {
     try {
       const { data } = await api.post('/api/devis', {
         ...form,
-        montant_ht: parseFloat(form.montant_ht),
-        tva_pct: parseFloat(form.tva_pct),
+        montant_ht:  parseFloat(form.montant_ht),
+        tva_pct:     parseFloat(form.tva_pct),
+        expire_days: parseInt(form.expire_days),
       })
       nav(`/devis/${data.id}`)
     } catch (err) {
@@ -50,25 +65,41 @@ export default function NewDevis() {
         <form onSubmit={submit}>
           {error && <div className="error-msg">{error}</div>}
 
+          {/* Client */}
           <div className="card" style={{ marginBottom: 16 }}>
             <h3 style={{ marginBottom: 16 }}>Client</h3>
-
             <div className="form-group">
               <label>Nom du client</label>
-              <input type="text" value={form.client_nom} onChange={set('client_nom')} placeholder="Jean Martin" />
+              <input
+                type="text"
+                value={form.client_nom}
+                onChange={set('client_nom')}
+                placeholder="Jean Martin"
+              />
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>Email <span style={{color:'var(--fg3)',fontWeight:400}}>(optionnel)</span></label>
-                <input type="email" value={form.client_email} onChange={set('client_email')} placeholder="jean@exemple.fr" />
+                <label>Email <span style={{ color: 'var(--fg3)', fontWeight: 400 }}>(optionnel)</span></label>
+                <input
+                  type="email"
+                  value={form.client_email}
+                  onChange={set('client_email')}
+                  placeholder="jean@exemple.fr"
+                />
               </div>
               <div className="form-group">
-                <label>Téléphone <span style={{color:'var(--fg3)',fontWeight:400}}>(optionnel)</span></label>
-                <input type="tel" value={form.client_tel} onChange={set('client_tel')} placeholder="06 12 34 56 78" />
+                <label>Téléphone <span style={{ color: 'var(--fg3)', fontWeight: 400 }}>(optionnel)</span></label>
+                <input
+                  type="tel"
+                  value={form.client_tel}
+                  onChange={set('client_tel')}
+                  placeholder="06 12 34 56 78"
+                />
               </div>
             </div>
           </div>
 
+          {/* Prestation */}
           <div className="card" style={{ marginBottom: 16 }}>
             <h3 style={{ marginBottom: 16 }}>Prestation</h3>
 
@@ -122,7 +153,32 @@ export default function NewDevis() {
             )}
           </div>
 
-          <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
+          {/* Validité */}
+          <div className="card" style={{ marginBottom: 24 }}>
+            <h3 style={{ marginBottom: 16 }}>Validité du devis</h3>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {EXPIRE_OPTIONS.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`btn ${form.expire_days == opt.value ? 'btn-primary' : 'btn-secondary'}`}
+                  style={{ minWidth: 90 }}
+                  onClick={() => setForm(f => ({ ...f, expire_days: String(opt.value) }))}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <div className="form-hint" style={{ marginTop: 10 }}>
+              Le lien expirera le <strong>{expireLabel}</strong>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="btn btn-primary btn-lg"
+            disabled={loading}
+          >
             {loading ? 'Création…' : 'Créer le devis et générer le lien'}
           </button>
         </form>

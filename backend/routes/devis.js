@@ -93,4 +93,22 @@ router.get('/:id', verifyJWT, async (req, res) => {
   }
 });
 
+// DELETE /api/devis/:id — supprimer un devis en attente uniquement
+router.delete('/:id', verifyJWT, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      'SELECT id, statut FROM devis WHERE id=$1 AND pro_id=$2',
+      [req.params.id, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
+    if (rows[0].statut !== 'en_attente')
+      return res.status(400).json({ error: 'Seul un devis en attente peut être supprimé' });
+
+    await db.query('DELETE FROM devis WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
