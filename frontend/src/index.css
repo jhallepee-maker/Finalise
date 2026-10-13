@@ -1,0 +1,408 @@
+/* ─── Tokens ─────────────────────────────────────────────── */
+:root {
+  --bg:        #fafafa;
+  --bg2:       #f2f2f0;
+  --fg:        #0f0f0f;
+  --fg2:       #5a5a5a;
+  --fg3:       #999;
+  --border:    #e2e2de;
+  --accent:    #1a1a1a;
+  --accent-fg: #fff;
+  --green:     #16a34a;
+  --green-bg:  #dcfce7;
+  --red:       #dc2626;
+  --red-bg:    #fee2e2;
+  --amber:     #d97706;
+  --amber-bg:  #fef3c7;
+  --radius:    10px;
+  --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:        #0f0f0f;
+    --bg2:       #1a1a1a;
+    --fg:        #f5f5f3;
+    --fg2:       #a0a09a;
+    --fg3:       #666;
+    --border:    #2a2a2a;
+    --accent:    #f5f5f3;
+    --accent-fg: #0f0f0f;
+    --shadow:    0 1px 3px rgba(0,0,0,.4);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg:        #0f0f0f;
+  --bg2:       #1a1a1a;
+  --fg:        #f5f5f3;
+  --fg2:       #a0a09a;
+  --fg3:       #666;
+  --border:    #2a2a2a;
+  --accent:    #f5f5f3;
+  --accent-fg: #0f0f0f;
+  --shadow:    0 1px 3px rgba(0,0,0,.4);
+  color-scheme: dark;
+}
+
+/* ─── Reset ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0 }
+
+html, body { height: 100% }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+img { max-width: 100% }
+[hidden] { display: none !important }
+
+/* ─── Loading ─────────────────────────────────────────────── */
+.loading {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 28px; height: 28px;
+  border: 2.5px solid var(--border);
+  border-top-color: var(--fg);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg) } }
+
+/* ─── Layout ──────────────────────────────────────────────── */
+.page {
+  min-height: 100vh;
+  padding: 0 16px;
+}
+
+.container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ─── Topbar ──────────────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 32px;
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.topbar-actions { display: flex; gap: 8px; align-items: center }
+
+/* ─── Typography ─────────────────────────────────────────── */
+h1 { font-size: 26px; font-weight: 700; letter-spacing: -.5px; line-height: 1.2; text-wrap: balance }
+h2 { font-size: 20px; font-weight: 600; letter-spacing: -.3px; text-wrap: balance }
+h3 { font-size: 16px; font-weight: 600 }
+
+/* ─── Buttons ────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 18px;
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: opacity .15s, transform .1s;
+  white-space: nowrap;
+}
+
+.btn:active { transform: scale(.97) }
+.btn:disabled { opacity: .5; cursor: not-allowed }
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+.btn-primary:hover:not(:disabled) { opacity: .85 }
+
+.btn-secondary {
+  background: var(--bg2);
+  color: var(--fg);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled) { border-color: var(--fg3) }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--fg2);
+  padding: 6px 10px;
+}
+.btn-ghost:hover { color: var(--fg); background: var(--bg2) }
+
+.btn-lg { padding: 13px 24px; font-size: 15px; width: 100%; border-radius: 12px }
+
+.btn-danger { background: var(--red); color: #fff }
+
+/* ─── Forms ──────────────────────────────────────────────── */
+.form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px }
+
+label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg2);
+  letter-spacing: .01em;
+}
+
+input, textarea, select {
+  padding: 10px 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color .15s;
+  width: 100%;
+}
+
+input:focus, textarea:focus, select:focus {
+  border-color: var(--fg);
+}
+
+textarea { resize: vertical; min-height: 100px }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+@media (max-width: 480px) { .form-row { grid-template-columns: 1fr } }
+
+.form-hint { font-size: 12px; color: var(--fg3) }
+
+/* ─── Cards ──────────────────────────────────────────────── */
+.card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+
+/* ─── Badge / statut ─────────────────────────────────────── */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+
+.badge-en_attente { background: var(--amber-bg); color: var(--amber) }
+.badge-signe      { background: var(--green-bg); color: var(--green) }
+.badge-paye       { background: var(--green-bg); color: var(--green) }
+.badge-expire     { background: var(--bg2); color: var(--fg3) }
+
+/* ─── Auth pages ─────────────────────────────────────────── */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.auth-box {
+  width: 100%;
+  max-width: 400px;
+}
+
+.auth-logo {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 8px;
+  color: var(--fg);
+}
+
+.auth-tagline {
+  color: var(--fg2);
+  font-size: 14px;
+  margin-bottom: 32px;
+}
+
+.auth-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--fg2);
+}
+
+.auth-footer a { color: var(--fg); font-weight: 500 }
+
+/* ─── Error ──────────────────────────────────────────────── */
+.error-msg {
+  background: var(--red-bg);
+  color: var(--red);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ─── Devis list ─────────────────────────────────────────── */
+.devis-list { display: flex; flex-direction: column; gap: 10px }
+
+.devis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  text-decoration: none;
+  color: var(--fg);
+  transition: border-color .15s, background .15s;
+}
+
+.devis-row:hover { border-color: var(--fg3); background: var(--bg2) }
+
+.devis-row-left { display: flex; flex-direction: column; gap: 3px; min-width: 0 }
+
+.devis-client { font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.devis-desc   { font-size: 13px; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
+.devis-row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0 }
+.devis-amount { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums }
+
+/* ─── Empty state ────────────────────────────────────────── */
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--fg2);
+}
+
+.empty h3 { color: var(--fg); margin-bottom: 8px }
+.empty p  { font-size: 14px; margin-bottom: 24px }
+
+/* ─── Client page ────────────────────────────────────────── */
+.client-page {
+  min-height: 100vh;
+  padding: 0 16px 48px;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.client-header {
+  padding: 24px 0 20px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 28px;
+}
+
+.client-logo { font-size: 17px; font-weight: 700; letter-spacing: -.4px }
+.client-pro  { font-size: 13px; color: var(--fg2); margin-top: 2px }
+
+.devis-card { margin-bottom: 24px }
+
+.line-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.line-item:last-child { border-bottom: none }
+.line-item-label { color: var(--fg2) }
+.line-item-value { font-weight: 500; font-variant-numeric: tabular-nums }
+.line-item-total .line-item-label,
+.line-item-total .line-item-value { font-size: 16px; font-weight: 700; color: var(--fg) }
+
+.signature-block { margin-bottom: 24px }
+.signature-block h3 { margin-bottom: 16px }
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--fg2);
+  margin-bottom: 16px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 18px; height: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+  cursor: pointer;
+}
+
+.legal-notice {
+  font-size: 11px;
+  color: var(--fg3);
+  margin-top: 20px;
+  line-height: 1.6;
+}
+
+/* ─── Success ────────────────────────────────────────────── */
+.success-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 16px;
+  gap: 12px;
+}
+
+.success-icon {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  background: var(--green-bg);
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  margin-bottom: 8px;
+}
+
+.success-page h2 { margin-bottom: 4px }
+.success-page p  { color: var(--fg2); font-size: 14px; max-width: 300px }
+
+/* ─── Divider ────────────────────────────────────────────── */
+.divider { border: none; border-top: 1px solid var(--border); margin: 24px 0 }
+
+/* ─── Montant display ────────────────────────────────────── */
+.montant-display {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -.5px;
+  font-variant-numeric: tabular-nums;
+}
