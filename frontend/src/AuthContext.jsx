@@ -19,15 +19,23 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const { data } = await api.post('/api/auth/login', { email, password })
     localStorage.setItem('token', data.token)
-    setUser(data.pro)
+    // Charger le profil complet (inclut stripe_account_id)
+    const me = await api.get('/api/auth/me')
+    setUser(me.data)
     return data
   }
 
   const register = async (form) => {
     const { data } = await api.post('/api/auth/register', form)
     localStorage.setItem('token', data.token)
-    setUser(data.pro)
+    const me = await api.get('/api/auth/me')
+    setUser(me.data)
     return data
+  }
+
+  const refreshUser = async () => {
+    const me = await api.get('/api/auth/me')
+    setUser(me.data)
   }
 
   const logout = () => {
@@ -36,7 +44,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <Ctx.Provider value={{ user, loading, login, register, logout }}>
+    <Ctx.Provider value={{ user, loading, login, register, logout, refreshUser }}>
       {children}
     </Ctx.Provider>
   )

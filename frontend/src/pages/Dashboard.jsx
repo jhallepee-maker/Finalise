@@ -15,15 +15,36 @@ function fmt(n) {
 }
 
 export default function Dashboard() {
-  const { user, logout } = useAuth()
-  const [devis, setDevis] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { user, logout, refreshUser } = useAuth()
+  const [devis, setDevis]           = useState([])
+  const [loading, setLoading]       = useState(true)
+  const [stripeLoading, setStripeLoading] = useState(false)
+  const [stripeMsg, setStripeMsg]   = useState('')
 
   useEffect(() => {
+    // Retour depuis Stripe onboarding
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('stripe') === 'ok')   { setStripeMsg('✓ Compte Stripe connecté avec succès !'); refreshUser() }
+    if (params.get('stripe') === 'refresh') setStripeMsg('Onboarding Stripe interrompu — veuillez recommencer.')
+    // Nettoyer l'URL sans rechargement
+    if (params.get('stripe')) window.history.replaceState({}, '', '/dashboard')
+
     api.get('/api/devis')
       .then(r => setDevis(r.data))
       .finally(() => setLoading(false))
   }, [])
+
+  const connectStripe = async () => {
+    setStripeLoading(true)
+    setStripeMsg('')
+    try {
+      const { data } = await api.post('/api/stripe/onboard')
+      window.location.href = data.url
+    } catch (err) {
+      setStripeMsg(err.response?.data?.error || 'Erreur lors de la connexion Stripe')
+      setStripeLoading(false)
+    }
+  }
 
   return (
     <div className="page">
@@ -37,6 +58,30 @@ export default function Dashboard() {
             <button className="btn btn-ghost" onClick={logout}>Déconnexion</button>
           </div>
         </div>
+
+        {/* Bandeau Stripe Connect */}
+        {!user?.stripe_account_id && !stripeMsg && (
+          <div className="stripe-banner">
+            <div>
+              <strong>Activez les paiements</strong>
+              <span style={{ fontSize: 13, color: 'var(--fg2)', marginLeft: 8 }}>
+                Connectez votre compte Stripe pour recevoir les paiements de vos clients.
+              </span>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={connectStripe}
+              disabled={stripeLoading}
+            >
+              {stripeLoading ? 'Redirection…' : 'Connecter Stripe'}
+            </button>
+          </div>
+        )}
+        {stripeMsg && (
+          <div className={`stripe-msg ${stripeMsg.startsWith('✓') ? 'stripe-msg-ok' : 'stripe-msg-warn'}`}>
+            {stripeMsg}
+          </div>
+        )}
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <h1>Mes devis</h1>

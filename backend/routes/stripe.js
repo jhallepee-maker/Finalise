@@ -58,29 +58,7 @@ router.post('/create-payment-intent', async (req, res) => {
   }
 });
 
-// POST /api/stripe/webhook — Stripe confirme le paiement
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'];
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (e) {
-    return res.status(400).send(`Webhook error: ${e.message}`);
-  }
-
-  if (event.type === 'payment_intent.succeeded') {
-    const pi = event.data.object;
-    const devis_id = pi.metadata.devis_id;
-    const montant = pi.amount / 100;
-    const commission = pi.application_fee_amount / 100;
-    await db.query(`UPDATE devis SET statut='paye' WHERE id=$1`, [devis_id]);
-    await db.query(
-      `INSERT INTO paiements (devis_id, stripe_payment_intent, montant_ttc, commission_joseph, montant_net_pro, statut, paye_at)
-       VALUES ($1,$2,$3,$4,$5,'succeeded',NOW())`,
-      [devis_id, pi.id, montant, commission, montant - commission]
-    );
-  }
-  res.json({ received: true });
-});
+// Le webhook /api/stripe/webhook est géré dans stripeWebhook.js
+// et monté dans server.js AVANT express.json() pour recevoir le body raw.
 
 module.exports = router;

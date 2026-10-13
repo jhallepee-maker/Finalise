@@ -4,6 +4,13 @@ const cors    = require('cors');
 const app     = express();
 
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+
+// Webhook Stripe doit recevoir le body RAW — monter AVANT express.json()
+app.post('/api/stripe/webhook',
+  express.raw({ type: 'application/json' }),
+  require('./routes/stripeWebhook')
+);
+
 app.use(express.json());
 
 // Routes
