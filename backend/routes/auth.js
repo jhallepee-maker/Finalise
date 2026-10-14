@@ -12,6 +12,8 @@ router.post('/register', async (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase();
   if (!email || !password || !nom)
     return res.status(400).json({ error: 'email, password et nom requis' });
+  if (req.body.accept_cgu !== true)
+    return res.status(400).json({ error: "Acceptez les conditions d'utilisation pour créer un compte" });
   if (String(password).length < 8)
     return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères' });
   try {
@@ -19,8 +21,8 @@ router.post('/register', async (req, res) => {
     if (dup.length) return res.status(409).json({ error: 'Email déjà utilisé' });
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
-      `INSERT INTO pros (email, password_hash, nom, prenom, siret, activite)
-       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, email, nom`,
+      `INSERT INTO pros (email, password_hash, nom, prenom, siret, activite, cgu_accepted_at)
+       VALUES ($1,$2,$3,$4,$5,$6,NOW()) RETURNING id, email, nom`,
       [email, hash, nom, prenom, siret, activite]
     );
     const token = jwt.sign({ id: rows[0].id, email }, process.env.JWT_SECRET, { expiresIn: '7d' });

@@ -105,6 +105,11 @@ export default function Register() {
               <input type="text" maxLength={14} value={form.siret} onChange={set('siret')} placeholder="12345678901234" />
             </div>
 
+            <label className="checkbox-row">
+              <input type="checkbox" required checked={!!form.accept_cgu} onChange={e => setForm(f => ({ ...f, accept_cgu: e.target.checked }))} />
+              <span>J'accepte les <Link to="/cgu" target="_blank">conditions d'utilisation</Link> de Finalise. <span className="req">*</span></span>
+            </label>
+
             <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>
               {loading ? 'Création…' : 'Créer mon compte'}
             </button>

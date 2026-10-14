@@ -1,3 +1,4 @@
+import Cgu from './pages/Cgu'
 import Confidentialite from './pages/Confidentialite'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
@@ -21,6 +22,7 @@ export default function App() {
       {/* Public */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/cgu" element={<Cgu />} />
       <Route path="/confidentialite" element={<Confidentialite />} />
       <Route path="/p/:token" element={<ClientPage />} />
 
