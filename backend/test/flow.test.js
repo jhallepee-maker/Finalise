@@ -102,6 +102,21 @@ test('assurance Meetch : choix obligatoire, prime, souscription idempotente (moc
   const { rows } = await db.query('SELECT meetch_status, meetch_subscription_id FROM devis WHERE id=$1', [d.id]);
   assert.equal(rows[0].meetch_status, 'subscribed');
   const b = meetch.buildSubscription({ ...(await db.query('SELECT * FROM devis WHERE id=$1', [d.id])).rows[0] }, D);
-  assert.equal(b.buyer_lastname, 'Dupont'); assert.equal(b.insurance_amount, 9);
+  assert.equal(b.buyer_lastname, 'Dupont'); assert.equal(b.insurance_amount, 9); assert.equal(b.paid, true);
+  assert.equal(typeof b.items[0].number, 'string');
+  // webhook signé
+  process.env.MEETCH_WEBHOOK_SECRET = 'k';
+  const express = require('express'); const http = require('http');
+  const app = express(); app.use(express.json()); app.use('/a', require('../routes/assurance'));
+  const srv = http.createServer(app).listen(0); const port = srv.address().port;
+  const post = async (body, sig) => (await fetch(`http://127.0.0.1:${port}/a/webhook/meetch`, { method: 'POST', headers: { 'content-type': 'application/json', ...(sig ? { 'webhook-signature': sig } : {}) }, body: JSON.stringify(body) })).status;
+  const body = { event: { type: 'claim.refunded' }, data: { refund_request: { order_reference: 'zzz', subscription_reference: 'mock_' + d.id } } };
+  const t = Math.floor(Date.now() / 1000);
+  const k = require('crypto').createHmac('sha256', 'k').update(`${t}:${JSON.stringify(body)}`).digest('hex');
+  assert.equal(await post(body), 401);
+  assert.equal(await post(body, `t=${t},k=bad`), 401);
+  assert.equal(await post(body, `t=${t},k=${k}`), 200);
+  assert.equal((await db.query('SELECT meetch_status FROM devis WHERE id=$1', [d.id])).rows[0].meetch_status, 'refunded');
+  srv.close(); delete process.env.MEETCH_WEBHOOK_SECRET;
   delete process.env.MEETCH_ENABLED;
 });

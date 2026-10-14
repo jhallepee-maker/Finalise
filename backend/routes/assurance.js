@@ -32,18 +32,29 @@ router.post('/:token', handle(async (req, res) => {
   res.json({ enabled: true, choix, prime });
 }));
 
-// POST /api/assurance/webhook/meetch — claim.refunded (secret partagé dans l'en-tête x-finalise-secret, à configurer côté Meetch)
-router.post('/webhook/meetch', handle(async (req, res) => {
+// POST /api/assurance/webhook/meetch — webhooks Meetch signés : en-tête Webhook-Signature "t=<unix>,k=<hmac>"
+// HMAC-SHA256(clé = MEETCH_WEBHOOK_SECRET, "<t>:<JSON du corps>"). Tolérance 5 min.
+function signatureOk(req) {
   const secret = process.env.MEETCH_WEBHOOK_SECRET;
-  const got = String(req.headers['x-finalise-secret'] || '');
-  const ok = secret && got.length === secret.length && crypto.timingSafeEqual(Buffer.from(got), Buffer.from(secret));
-  if (!ok) throw new HttpError(401, 'Non autorisé');
-  const b = req.body || {};
-  if (b.event !== 'claim.refunded' && b.type !== 'claim.refunded') return res.json({ received: true });
-  const data = b.data || b;
-  const ref = data.order_reference || data.reference;
-  const sub = data.subscription_id || data.id;
-  await db.query(`UPDATE devis SET meetch_status='refunded' WHERE (numero=$1 AND $1 IS NOT NULL) OR (meetch_subscription_id=$2 AND $2 IS NOT NULL)`, [ref || null, sub ? String(sub) : null]);
+  const h = String(req.headers['webhook-signature'] || '');
+  if (!secret || !h) return false;
+  const m = Object.fromEntries(h.split(',').map(x => x.split('=')).filter(x => x.length >= 2).map(([k, ...v]) => [k.trim(), v.join('=')]));
+  if (!m.t || !m.k || Math.abs(Date.now() / 1000 - Number(m.t)) > 300) return false;
+  const exp = crypto.createHmac('sha256', secret).update(`${m.t}:${JSON.stringify(req.body)}`, 'utf8').digest('hex');
+  return exp.length === m.k.length && crypto.timingSafeEqual(Buffer.from(exp), Buffer.from(m.k));
+}
+const STATUS = { 'claim.opened': 'claim_opened', 'claim.refused': 'claim_refused', 'claim.refunded': 'refunded' };
+
+router.post('/webhook/meetch', handle(async (req, res) => {
+  if (!signatureOk(req)) throw new HttpError(401, 'Signature invalide');
+  const type = req.body && req.body.event && req.body.event.type;
+  const st = STATUS[type];
+  if (!st) return res.json({ received: true });
+  const rr = (req.body.data && req.body.data.refund_request) || {};
+  const ref = rr.order_reference || null;
+  const sub = rr.subscription_reference ? String(rr.subscription_reference) : null;
+  if (ref || sub) await db.query(
+    `UPDATE devis SET meetch_status=$3 WHERE (meetch_subscription_id=$2 AND $2 IS NOT NULL) OR (numero=$1 AND $1 IS NOT NULL)`, [ref, sub, st]);
   res.json({ received: true });
 }));
 
