@@ -18,6 +18,9 @@ router.put('/:id', verifyJWT, handle(async (req, res) => {
   res.json(await createDevis(req.user.id, req.body || {}, req.params.id));
 }));
 
+// Un devis non signé dont le lien a expiré s'affiche « expiré » (le statut en base reste en_attente)
+const view = d => (d.statut === 'en_attente' && d.expire_at && new Date(d.expire_at) < new Date() ? { ...d, statut: 'expire' } : d);
+
 // GET /api/devis — liste des devis du pro connecté
 router.get('/', verifyJWT, async (req, res) => {
   try {
@@ -25,7 +28,7 @@ router.get('/', verifyJWT, async (req, res) => {
       'SELECT * FROM devis WHERE pro_id=$1 ORDER BY created_at DESC',
       [req.user.id]
     );
-    res.json(rows);
+    res.json(rows.map(view));
   } catch (e) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
@@ -55,7 +58,7 @@ router.get('/:id', verifyJWT, async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
     const lignes = await getLignes(rows[0].id);
     const { rows: fa } = await db.query('SELECT numero, emise_at FROM factures WHERE devis_id=$1', [rows[0].id]);
-    res.json({ ...rows[0], lignes, facture: fa[0] || null });
+    res.json({ ...view(rows[0]), lignes, facture: fa[0] || null });
   } catch (e) {
     res.status(500).json({ error: 'Erreur serveur' });
   }
