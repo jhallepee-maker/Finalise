@@ -51,7 +51,13 @@ router.get('/status', verifyJWT, async (req, res) => {
 
 // POST /api/stripe/create-payment-intent — client prêt à payer
 router.post('/create-payment-intent', async (req, res) => {
-  const { token } = req.body;
+  try { await createPaymentIntent(req, res) } catch (e) {
+    console.error('[create-payment-intent]', e.message)
+    if (!res.headersSent) res.status(500).json({ error: 'Erreur lors de la préparation du paiement' })
+  }
+});
+async function createPaymentIntent(req, res) {
+  const { token } = req.body || {};
   if (!token) return res.status(400).json({ error: 'token requis' });
 
   const { rows } = await db.query(
@@ -106,7 +112,7 @@ router.post('/create-payment-intent', async (req, res) => {
     console.error('[create-payment-intent]', e.message);
     res.status(500).json({ error: 'Erreur lors de la préparation du paiement' });
   }
-});
+}
 
 // Le webhook /api/stripe/webhook est géré dans stripeWebhook.js
 // et monté dans server.js AVANT express.json() pour recevoir le body raw.

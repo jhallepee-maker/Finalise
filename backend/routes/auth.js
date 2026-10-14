@@ -8,12 +8,15 @@ const router   = express.Router();
 
 // POST /api/auth/register — inscription pro
 router.post('/register', async (req, res) => {
-  const { email, password, nom, prenom, siret, activite } = req.body;
+  const { password, nom, prenom, siret, activite } = req.body;
+  const email = String(req.body.email || '').trim().toLowerCase();
   if (!email || !password || !nom)
     return res.status(400).json({ error: 'email, password et nom requis' });
   if (String(password).length < 8)
     return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères' });
   try {
+    const { rows: dup } = await db.query('SELECT 1 FROM pros WHERE lower(email)=$1', [email]);
+    if (dup.length) return res.status(409).json({ error: 'Email déjà utilisé' });
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
       `INSERT INTO pros (email, password_hash, nom, prenom, siret, activite)
@@ -30,9 +33,10 @@ router.post('/register', async (req, res) => {
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body;
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
   try {
-    const { rows } = await db.query('SELECT * FROM pros WHERE email=$1', [email]);
+    const { rows } = await db.query('SELECT * FROM pros WHERE lower(email)=$1', [email]);
     if (!rows.length) return res.status(401).json({ error: 'Identifiants incorrects' });
     const ok = await bcrypt.compare(password, rows[0].password_hash);
     if (!ok) return res.status(401).json({ error: 'Identifiants incorrects' });
