@@ -29,6 +29,8 @@ router.post('/signer', async (req, res) => {
   if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
   if (rows[0].statut !== 'en_attente')
     return res.status(400).json({ error: `Devis déjà ${rows[0].statut}` });
+  if (rows[0].expire_at && new Date(rows[0].expire_at) < new Date())
+    return res.status(410).json({ error: 'Ce lien a expiré' });
 
   const d = rows[0];
   // x-forwarded-for peut contenir une chaîne d'IP : on garde le client d'origine

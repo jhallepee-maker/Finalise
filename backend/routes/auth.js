@@ -3,6 +3,7 @@ const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const db       = require('../db');
 const { verifyJWT } = require('../middleware/auth');
+const { syncAccount } = require('../lib/stripeSync');
 const router   = express.Router();
 
 // POST /api/auth/register — inscription pro
@@ -10,6 +11,8 @@ router.post('/register', async (req, res) => {
   const { email, password, nom, prenom, siret, activite } = req.body;
   if (!email || !password || !nom)
     return res.status(400).json({ error: 'email, password et nom requis' });
+  if (String(password).length < 8)
+    return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 8 caractères' });
   try {
     const hash = await bcrypt.hash(password, 12);
     const { rows } = await db.query(
@@ -43,10 +46,16 @@ router.post('/login', async (req, res) => {
 // GET /api/auth/me — profil connecté
 router.get('/me', verifyJWT, async (req, res) => {
   const { rows } = await db.query(
-    'SELECT id, email, nom, prenom, siret, activite, stripe_account_id FROM pros WHERE id=$1',
+    'SELECT id, email, nom, prenom, siret, activite, stripe_account_id, charges_enabled, details_submitted FROM pros WHERE id=$1',
     [req.user.id]
   );
-  res.json(rows[0]);
+  const me = rows[0];
+  // Compte Stripe créé mais pas encore actif : on resynchronise (rattrape un webhook manqué)
+  if (me && me.stripe_account_id && !me.charges_enabled) {
+    const flags = await syncAccount(me.id, me.stripe_account_id);
+    if (flags) Object.assign(me, flags);
+  }
+  res.json(me);
 });
 
 module.exports = router;

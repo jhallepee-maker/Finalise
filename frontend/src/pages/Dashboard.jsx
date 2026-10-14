@@ -74,7 +74,7 @@ export default function Dashboard() {
   // Calcul des stats
   const totalEncaisse = devis
     .filter(d => d.statut === 'paye')
-    .reduce((s, d) => s + (d.montant_ttc || 0), 0)
+    .reduce((s, d) => s + Number(d.montant_ttc || 0), 0) // pg renvoie NUMERIC en string
 
   const enAttente = devis.filter(d => d.statut === 'en_attente').length
   const signes    = devis.filter(d => d.statut === 'signe').length
@@ -93,12 +93,14 @@ export default function Dashboard() {
         </div>
 
         {/* Bandeau Stripe Connect */}
-        {!user?.stripe_account_id && !stripeMsg && (
+        {!user?.charges_enabled && !stripeMsg && (
           <div className="stripe-banner">
             <div>
-              <strong>Activez les paiements</strong>
+              <strong>{user?.stripe_account_id ? 'Terminez votre inscription Stripe' : 'Activez les paiements'}</strong>
               <span style={{ fontSize: 13, color: 'var(--fg2)', marginLeft: 8 }}>
-                Connectez votre compte Stripe pour recevoir les paiements de vos clients.
+                {user?.stripe_account_id
+                  ? "Votre compte n'est pas encore actif : vos clients ne peuvent pas encore payer."
+                  : 'Connectez votre compte Stripe pour recevoir les paiements de vos clients.'}
               </span>
             </div>
             <button
@@ -106,7 +108,7 @@ export default function Dashboard() {
               onClick={connectStripe}
               disabled={stripeLoading}
             >
-              {stripeLoading ? 'Redirection…' : 'Connecter Stripe'}
+              {stripeLoading ? 'Redirection…' : user?.stripe_account_id ? 'Reprendre' : 'Connecter Stripe'}
             </button>
           </div>
         )}

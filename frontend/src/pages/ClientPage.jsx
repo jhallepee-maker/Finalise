@@ -68,7 +68,7 @@ function Steps({ current }) {
     { key: 'sign', label: 'Signature' },
     { key: 'pay',  label: 'Paiement' },
   ]
-  const idx = { view: 0, sign: 1, pay: 2, pay_pending: 2, done: 3 }
+  const idx = { view: 0, sign: 1, pay: 2, pay_pending: 2, confirming: 2, confirming_timeout: 2, done: 3 }
   const cur = idx[current] ?? 0
 
   return (
@@ -102,7 +102,22 @@ export default function ClientPage() {
   useEffect(() => {
     // Retour depuis redirection Stripe
     const params = new URLSearchParams(window.location.search)
-    if (params.get('paid') === '1') { setStep('done'); return }
+    // On ne se fie pas au paramètre : on attend que le webhook ait marqué le devis « payé »
+    if (params.get('paid') === '1') {
+      let tries = 0
+      let timer
+      const poll = () => api.get(`/api/devis/token/${token}`)
+        .then(r => {
+          setDevis(r.data)
+          if (r.data.statut === 'paye') { setStep('done'); return }
+          if (++tries < 15) timer = setTimeout(poll, 2000)
+          else setStep('confirming_timeout')
+        })
+        .catch(() => setError('Ce lien est invalide ou a expiré.'))
+      setStep('confirming')
+      poll()
+      return () => clearTimeout(timer)
+    }
 
     api.get(`/api/devis/token/${token}`)
       .then(r => {
@@ -162,6 +177,12 @@ export default function ClientPage() {
         </div>
       )}
       <p>Merci — votre paiement a bien été reçu. Une confirmation vous sera transmise par le prestataire.</p>
+      <p style={{ marginTop: 16 }}>
+        <a href={`${import.meta.env.VITE_API_URL || ''}/api/paiement/justificatif/${token}`}
+           target="_blank" rel="noreferrer" style={{ fontSize: 14 }}>
+          Télécharger le justificatif de signature (PDF)
+        </a>
+      </p>
     </div>
   )
 
@@ -263,6 +284,26 @@ export default function ClientPage() {
               <PaymentForm devis={devis} onSuccess={() => setStep('done')} />
             </Elements>
           </div>
+        </div>
+      )}
+
+      {/* Retour de Stripe : confirmation en cours */}
+      {(step === 'confirming' || step === 'confirming_timeout') && (
+        <div className="card" style={{ textAlign: 'center', padding: 32 }}>
+          {step === 'confirming' ? (
+            <>
+              <div className="spinner" style={{ margin: '0 auto 16px' }} />
+              <h3>Confirmation du paiement…</h3>
+              <p style={{ color: 'var(--fg2)', fontSize: 14, marginTop: 8 }}>Cela ne prend que quelques secondes.</p>
+            </>
+          ) : (
+            <>
+              <h3>Paiement en cours de traitement</h3>
+              <p style={{ color: 'var(--fg2)', fontSize: 14, marginTop: 8 }}>
+                Nous n'avons pas encore reçu la confirmation de votre banque. Rechargez cette page dans un instant : si le paiement a abouti, il s'affichera ici.
+              </p>
+            </>
+          )}
         </div>
       )}
 

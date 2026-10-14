@@ -13,7 +13,9 @@ api.interceptors.request.use(cfg => {
 api.interceptors.response.use(
   r => r,
   err => {
-    if (err.response?.status === 401) {
+    // Pas de redirection sur /login ou /register : on laisse la page afficher l'erreur (mauvais mot de passe…)
+    const onAuthPage = ['/login', '/register'].includes(window.location.pathname)
+    if (err.response?.status === 401 && !onAuthPage) {
       localStorage.removeItem('token')
       window.location.href = '/login'
     }
