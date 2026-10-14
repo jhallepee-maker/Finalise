@@ -1,6 +1,21 @@
+const crypto  = require('crypto');
 const express = require('express');
 const db      = require('../db');
 const router  = express.Router();
+
+// Snapshot figé du devis tel que vu par le client (ordre des clés fixe → hash stable)
+function snapshotDevis(d) {
+  return {
+    devis_id:     d.id,
+    pro_id:       d.pro_id,
+    client_nom:   d.client_nom,
+    client_email: d.client_email,
+    description:  d.description,
+    montant_ht:   String(d.montant_ht),
+    tva_pct:      String(d.tva_pct),
+    montant_ttc:  String(d.montant_ttc),
+  };
+}
 
 // POST /api/paiement/signer — signature électronique client
 router.post('/signer', async (req, res) => {
@@ -15,16 +30,29 @@ router.post('/signer', async (req, res) => {
   if (rows[0].statut !== 'en_attente')
     return res.status(400).json({ error: `Devis déjà ${rows[0].statut}` });
 
-  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const d = rows[0];
+  // x-forwarded-for peut contenir une chaîne d'IP : on garde le client d'origine
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')
+    .split(',')[0].trim().slice(0, 45);
   const ua = req.headers['user-agent'];
 
-  await db.query(
-    `INSERT INTO signatures (devis_id, nom_signe, ip_address, user_agent) VALUES ($1,$2,$3,$4)`,
-    [rows[0].id, nom_signe, ip, ua]
-  );
-  await db.query(`UPDATE devis SET statut='signe' WHERE id=$1`, [rows[0].id]);
+  const snapshot = snapshotDevis(d);
+  const hash = crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
 
-  res.json({ message: 'Signature enregistrée', devis_id: rows[0].id, signe_at: new Date() });
+  // Une seule requête atomique : passage à 'signe' + insertion de la signature.
+  // Si deux signatures arrivent en même temps, une seule passe.
+  const { rows: signed } = await db.query(
+    `WITH upd AS (
+       UPDATE devis SET statut='signe' WHERE id=$1 AND statut='en_attente' RETURNING id
+     )
+     INSERT INTO signatures (devis_id, nom_signe, ip_address, user_agent, contenu_snapshot, contenu_hash)
+     SELECT id, $2, $3, $4, $5::jsonb, $6 FROM upd
+     RETURNING signe_at`,
+    [d.id, nom_signe, ip, ua, JSON.stringify(snapshot), hash]
+  );
+  if (!signed.length) return res.status(400).json({ error: 'Devis déjà signé' });
+
+  res.json({ message: 'Signature enregistrée', devis_id: d.id, signe_at: signed[0].signe_at, hash });
 });
 
 module.exports = router;
