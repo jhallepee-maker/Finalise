@@ -3,6 +3,7 @@ const stripe  = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const db      = require('../db');
 const { verifyJWT } = require('../middleware/auth');
 const { syncAccount } = require('../lib/stripeSync');
+const meetch = require('../lib/meetch');
 const router  = express.Router();
 
 const COMMISSION_PCT = 0.01; // 1% Joseph
@@ -79,8 +80,15 @@ async function createPaymentIntent(req, res) {
   if (!chargesEnabled)
     return res.status(409).json({ error: "Le prestataire n'a pas terminé la configuration du paiement" });
 
-  const montant_centimes = Math.round(Number(d.montant_ttc) * 100);
-  const commission = Math.round(montant_centimes * COMMISSION_PCT);
+  const service_centimes = Math.round(Number(d.montant_ttc) * 100);
+  // Assurance annulation (Meetch) : réponse oui/non obligatoire avant paiement ; la prime s'ajoute au montant
+  let prime_centimes = 0;
+  if (meetch.enabled()) {
+    if (!d.assurance_choix) return res.status(409).json({ error: 'Choix assurance requis', code: 'assurance_requise' });
+    if (d.assurance_choix === 'oui') prime_centimes = Math.round(Number(d.assurance_montant || 0) * 100);
+  }
+  const montant_centimes = service_centimes + prime_centimes;
+  const commission = Math.round(service_centimes * COMMISSION_PCT); // commission sur la prestation uniquement
   const opts = { stripeAccount: d.stripe_account_id };
 
   try {

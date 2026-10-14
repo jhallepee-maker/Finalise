@@ -39,6 +39,7 @@ app.use('/api/profil',  require('./routes/profil'));
 app.use('/api/devis',   require('./routes/devis'));
 app.use('/api/paiement',require('./routes/paiement'));
 app.use('/api/stripe',  require('./routes/stripe'));
+app.use('/api/assurance', require('./routes/assurance'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
 

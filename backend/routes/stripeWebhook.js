@@ -2,6 +2,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const db     = require('../db');
 const { notifyPaid, fire } = require('../lib/notifications');
 const { issueFacture } = require('../services/factureService');
+const { subscribeDevis } = require('../services/assuranceService');
 
 // Frais Stripe réels lus sur la balance_transaction du compte connecté (direct charge).
 // Retourne null si indisponible → l'appelant retombe sur une estimation.
@@ -64,6 +65,8 @@ module.exports = async (req, res) => {
         // Idempotent : si l'émission a échoué lors d'une livraison précédente, un rejeu de Stripe la rattrape
         try { await issueFacture(devis_id); } catch (e) { console.error('[facture]', e.message); }
         if (firstTime.length) fire(notifyPaid, devis_id);
+        // Assurance Meetch : un échec ne doit pas bloquer le paiement ; la souscription sera retentée au rejeu / manuellement
+        try { await subscribeDevis(devis_id); } catch (e) { /* déjà journalisé, meetch_status='error' */ }
         break;
       }
 

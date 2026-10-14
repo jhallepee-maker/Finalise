@@ -86,3 +86,22 @@ test('correction d\'un devis non signé : même lien, refus après signature', a
   await signDevis(d.token_unique, { ...base, dates_confirmees: pub.dates }, '1.1.1.1', 'ua');
   await assert.rejects(createDevis(pro, { objet: 'C', montant: 1, tva_mode: 'non_applicable', dates: D, participants_max: 2, champs_requis: ['nom'] }, d.id), /signé/i);
 });
+
+test('assurance Meetch : choix obligatoire, prime, souscription idempotente (mock)', async () => {
+  process.env.MEETCH_ENABLED = '1';
+  const meetch = require('../lib/meetch');
+  const { subscribeDevis } = require('../services/assuranceService');
+  const d = await createDevis(pro, { objet: 'Sortie', montant: 200, dates: D, participants_max: 2, champs_requis: ['nom', 'email'] });
+  await signDevis(d.token_unique, { ...base, dates_confirmees: undefined, ...(await (async () => { const pub = await getPublicDevis(d.token_unique); return { dates_confirmees: pub.dates.map(x => ({ date: x.date, mode: x.mode, debut: x.debut, fin: x.fin })) }; })()) }, '127.0.0.1', 'test').catch(() => {});
+  assert.equal(await meetch.premium(200), 9); // 4,5 % de 200 €
+  assert.equal(await meetch.premium(10), 2);  // plancher
+  await db.query(`UPDATE devis SET statut='paye', assurance_choix='oui', assurance_montant=9, client_nom='Jean Dupont', client_email='j@t.fr' WHERE id=$1`, [d.id]);
+  const r1 = await subscribeDevis(d.id);
+  assert.ok(r1.mock);
+  assert.equal(await subscribeDevis(d.id), null); // déjà souscrit
+  const { rows } = await db.query('SELECT meetch_status, meetch_subscription_id FROM devis WHERE id=$1', [d.id]);
+  assert.equal(rows[0].meetch_status, 'subscribed');
+  const b = meetch.buildSubscription({ ...(await db.query('SELECT * FROM devis WHERE id=$1', [d.id])).rows[0] }, D);
+  assert.equal(b.buyer_lastname, 'Dupont'); assert.equal(b.insurance_amount, 9);
+  delete process.env.MEETCH_ENABLED;
+});

@@ -122,6 +122,8 @@ export default function ClientPage() {
   const [step, setStep]             = useState('view') // view | sign | pay | done
   const [clientSecret, setClientSecret] = useState(null)
   const [stripeAccount, setStripeAccount] = useState(null)
+  const [assurance, setAssurance] = useState({ enabled: false })
+  const [choixLoading, setChoixLoading] = useState(false)
 
   // Informations client + cases à cocher
   const [client, setClient] = useState({ nom: '', email: '', tel: '', adresse: '' })
@@ -169,6 +171,10 @@ export default function ClientPage() {
 
   const initPayment = async (d) => {
     try {
+      // Assurance annulation (si activée côté serveur) : réponse oui/non obligatoire avant le paiement
+      const a = (await api.get(`/api/assurance/${token}`).catch(() => ({ data: { enabled: false } }))).data
+      setAssurance(a)
+      if (a.enabled && !a.choix) { setStep('assurance'); return }
       const { data } = await api.post('/api/stripe/create-payment-intent', { token })
       setClientSecret(data.client_secret)
       setStripeAccount(data.stripe_account)
@@ -193,6 +199,16 @@ export default function ClientPage() {
   }
   const isTodo = id => reste.some(r => r.id === id)
   const suffixe = devis && !devis.tva_franchise ? ' TTC' : ''
+
+  const choisirAssurance = async choix => {
+    setChoixLoading(true)
+    try {
+      const { data } = await api.post(`/api/assurance/${token}`, { choix })
+      setAssurance(data)
+      await initPayment(devis)
+    } catch { setError("Impossible d'enregistrer votre choix. Réessayez.") }
+    finally { setChoixLoading(false) }
+  }
 
   const sign = async e => {
     e.preventDefault()
@@ -385,6 +401,21 @@ export default function ClientPage() {
         </form>
       )}
 
+      {/* Étape : assurance annulation (optionnelle, réponse obligatoire) */}
+      {step === 'assurance' && assurance.enabled && (
+        <div className="card">
+          <h3 style={{ marginTop: 0 }}>Souhaitez-vous assurer votre réservation ?</h3>
+          <p style={{ fontSize: 14, color: 'var(--fg2)' }}>
+            Assurance annulation proposée par Meetch : en cas d'annulation pour un motif garanti, vous êtes remboursé selon les conditions du contrat.
+            Prime : <strong>{fmt(assurance.prime)}</strong>, ajoutée au paiement. Le remboursement est géré par l'assureur, pas par {devis.pro_nom} ni Finalise.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="btn btn-primary" disabled={choixLoading} onClick={() => choisirAssurance('oui')}>Oui, m'assurer (+ {fmt(assurance.prime)})</button>
+            <button className="btn btn-secondary" disabled={choixLoading} onClick={() => choisirAssurance('non')}>Non, sans assurance</button>
+          </div>
+        </div>
+      )}
+
       {/* Étape : paiement Stripe */}
       {step === 'pay' && clientSecret && getStripe(stripeAccount) && (
         <div>
@@ -394,7 +425,8 @@ export default function ClientPage() {
           </div>
           <div className="card">
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
-              <div className="montant-display">{fmt(devis.montant_ttc)}</div>
+              <div className="montant-display">{fmt(Number(devis.montant_ttc) + (assurance.choix === 'oui' ? Number(assurance.prime || 0) : 0))}</div>
+              {assurance.choix === 'oui' && <div style={{ fontSize: 12, color: 'var(--fg2)' }}>dont assurance annulation {fmt(assurance.prime)}</div>}
               <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>à régler maintenant</div>
             </div>
             <Elements stripe={getStripe(stripeAccount)} options={stripeOptions}>
