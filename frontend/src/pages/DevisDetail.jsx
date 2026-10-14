@@ -103,6 +103,7 @@ export default function DevisDetail() {
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
               <a href={waLink(devis.client_tel, texte)} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ textDecoration: 'none' }}>WhatsApp</a>
               <a href={mailLink(devis, pro, texte)} className="btn btn-secondary" style={{ textDecoration: 'none' }}>Email</a>
+              {navigator.share && <button className="btn btn-secondary" onClick={() => navigator.share({ title: 'Votre devis', text: texte }).catch(() => {})}>Partager…</button>}
               <button className="btn btn-secondary" onClick={copyLink}>{copied ? '✓ Lien copié' : 'Copier le lien'}</button>
               {msg !== null && <button className="btn btn-ghost" onClick={() => setMsg(null)}>Réinitialiser</button>}
             </div>

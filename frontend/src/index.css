@@ -519,3 +519,6 @@ textarea { resize: vertical; min-height: 100px }
 }
 .stripe-msg-ok   { background: color-mix(in srgb, var(--green) 12%, var(--bg)); color: var(--green) }
 .stripe-msg-warn { background: color-mix(in srgb, var(--amber) 12%, var(--bg)); color: var(--amber) }
+.devis-item { display: flex; flex-direction: column; gap: 6px }
+.quick-send { display: flex; gap: 8px; padding: 0 2px }
+.quick-send .btn { padding: 6px 14px; font-size: 13px; text-decoration: none }

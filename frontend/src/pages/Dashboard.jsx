@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import api from '../api'
+import { buildMessage, waLink, mailLink } from '../share'
 
 const LABELS = {
   en_attente: 'En attente',
@@ -42,6 +43,8 @@ function StatTile({ label, value, sub, accent }) {
 }
 
 export default function Dashboard() {
+  const [pro, setPro] = useState(null)
+  useEffect(() => { api.get('/api/profil').then(r => setPro(r.data)).catch(() => {}) }, [])
   const { user, logout, refreshUser } = useAuth()
   const [devis, setDevis]             = useState([])
   const [loading, setLoading]         = useState(true)
@@ -156,8 +159,12 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="devis-list">
-            {devis.map(d => (
-              <Link key={d.id} to={`/devis/${d.id}`} className="devis-row">
+            {devis.map(d => {
+              const url = `${window.location.origin}/p/${d.token_unique}`
+              const texte = d.statut === 'en_attente' ? buildMessage(d, pro, url) : ''
+              return (
+              <div key={d.id} className="devis-item">
+              <Link to={`/devis/${d.id}`} className="devis-row">
                 <div className="devis-row-left">
                   <span className="devis-client">{d.client_nom || 'Client sans nom'}</span>
                   <span className="devis-desc">{d.description}</span>
@@ -167,7 +174,15 @@ export default function Dashboard() {
                   <span className={`badge badge-${d.statut}`}>{LABELS[d.statut] || d.statut}</span>
                 </div>
               </Link>
-            ))}
+              {texte && (
+                <div className="quick-send">
+                  <a href={waLink(d.client_tel, texte)} target="_blank" rel="noreferrer" className="btn btn-secondary">WhatsApp</a>
+                  <a href={mailLink(d, pro, texte)} className="btn btn-secondary">Email</a>
+                </div>
+              )}
+              </div>
+              )
+            })}
           </div>
         )}
       </div>
