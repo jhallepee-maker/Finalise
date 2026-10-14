@@ -246,7 +246,7 @@ export default function DevisDetail() {
             <span className="line-item-value">{fmt(devis.montant_ht)}</span>
           </div>
           <div className="line-item">
-            <span className="line-item-label">TVA {devis.tva_pct}%</span>
+            <span className="line-item-label">TVA {Number(devis.tva_pct)} %</span>
             <span className="line-item-value">{fmt(devis.montant_ttc - devis.montant_ht)}</span>
           </div>
           <div className="line-item line-item-total">

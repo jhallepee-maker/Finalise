@@ -315,7 +315,7 @@ export default function ClientPage() {
             <div className="legal-notice">
               Prestation de loisirs à date précise{devis.date_prestation ? ` (${devis.date_prestation})` : ''} : le droit de rétractation de 14 jours ne s'applique pas. Le paiement de {fmt(devis.montant_ttc)} est exigé en totalité à la commande.
             </div>
-            <button type="submit" className="btn btn-primary btn-lg" disabled={signLoading}>
+            <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 16 }} disabled={signLoading}>
               {signLoading ? 'Enregistrement…' : 'Signer et passer au paiement'}
             </button>
           </div>
