@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import api from '../api'
 
 const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
@@ -16,13 +16,17 @@ const emptyDate = () => ({ date: '', mode: 'journee', debut: '08:00', fin: '17:0
 
 export default function NewDevis() {
   const nav = useNavigate()
+  const src = useLocation().state?.from // devis dupliqué (sans dates ni client)
+  const srcMulti = !!src && (src.lignes || []).length > 1
   const [profil, setProfil] = useState(null)
   const [form, setForm] = useState({
-    objet: '', montant: '', cgv_langue: 'fr', tva_mode: 'incluse', tva_pct: '20', expire_days: 30, participants_max: '4', prix_mode: 'ttc',
+    objet: src?.objet || '', montant: src && !srcMulti ? String(Number(src.montant_ttc)) : '', cgv_langue: src?.cgv_langue || 'fr', tva_mode: src?.tva_mode || 'incluse', tva_pct: src && Number(src.tva_pct) > 0 ? String(Number(src.tva_pct)) : '20', expire_days: 30, participants_max: String(src?.participants_max || 4), prix_mode: 'ttc',
     client_nom: '', client_email: '', client_tel: '', client_adresse: '',
   })
-  const [detail, setDetail] = useState(false)
-  const [lignes, setLignes] = useState([emptyLigne()])
+  const [detail, setDetail] = useState(!!srcMulti)
+  const [lignes, setLignes] = useState(srcMulti
+    ? src.lignes.map(l => ({ description: l.description, quantite: String(Number(l.quantite)), prix: String(l.prix_unitaire_ttc != null ? Number(l.prix_unitaire_ttc) : Math.round(Number(l.prix_unitaire_ht) * (1 + Number(src.tva_pct || 0) / 100) * 100) / 100) }))
+    : [emptyLigne()])
   const [dates, setDates] = useState([emptyDate()])
   const [requis, setRequis] = useState({ nom: true, email: true, tel: true, adresse: false })
   const [error, setError] = useState('')
@@ -31,7 +35,7 @@ export default function NewDevis() {
   useEffect(() => {
     api.get('/api/profil').then(({ data }) => {
       setProfil(data)
-      setForm(f => ({
+      if (!src) setForm(f => ({
         ...f,
         tva_mode: data.tva_franchise ? 'non_applicable' : 'incluse',
         cgv_langue: data.cgv_pdf?.fr || data.cgv_url ? 'fr' : 'en',
@@ -91,7 +95,7 @@ export default function NewDevis() {
           <Link to="/" className="btn btn-ghost">← Retour</Link>
         </div>
 
-        <h1 style={{ marginBottom: 24 }}>Nouveau devis</h1>
+        <h1 style={{ marginBottom: 24 }}>{src ? `Nouveau devis (copie de ${src.numero || "devis"})` : 'Nouveau devis'}</h1>
 
         {profilIncomplet && (
           <div className="error-msg" style={{ marginBottom: 16 }}>

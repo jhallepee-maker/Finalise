@@ -163,6 +163,10 @@ export default function DevisDetail() {
           </div>
         )}
 
+        <div style={{ marginBottom: 16 }}>
+          <button className="btn btn-secondary" onClick={() => nav('/devis/new', { state: { from: devis } })}>Dupliquer ce devis</button>
+        </div>
+
         {/* Suppression */}
         {isWaiting && (
           <div style={{ marginBottom: 16 }}>
