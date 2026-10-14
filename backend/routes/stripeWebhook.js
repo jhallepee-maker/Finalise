@@ -1,5 +1,6 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const db     = require('../db');
+const { notifyPaid, fire } = require('../lib/notifications');
 
 // Frais Stripe réels lus sur la balance_transaction du compte connecté (direct charge).
 // Retourne null si indisponible → l'appelant retombe sur une estimation.
@@ -45,7 +46,10 @@ module.exports = async (req, res) => {
         // Estimation de repli : 1.5% + 0.25€ (cartes européennes)
         const stripe_fees = real != null ? real : parseFloat(((montant * 0.015) + 0.25).toFixed(2));
 
-        await db.query(`UPDATE devis SET statut='paye' WHERE id=$1`, [devis_id]);
+        // RETURNING ne renvoie une ligne qu'à la 1re transition → pas d'emails en double si Stripe rejoue l'événement
+        const { rows: firstTime } = await db.query(
+          `UPDATE devis SET statut='paye' WHERE id=$1 AND statut<>'paye' RETURNING id`, [devis_id]
+        );
         await db.query(
           `INSERT INTO paiements
              (devis_id, stripe_payment_intent, montant_ttc, commission_joseph, stripe_fees, montant_net_pro, statut, paye_at)
@@ -56,6 +60,7 @@ module.exports = async (req, res) => {
              statut='succeeded', paye_at=COALESCE(paiements.paye_at, NOW())`,
           [devis_id, pi.id, montant, commission, stripe_fees, montant - commission - stripe_fees]
         );
+        if (firstTime.length) fire(notifyPaid, devis_id);
         break;
       }
 

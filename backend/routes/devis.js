@@ -2,6 +2,7 @@ const express = require('express');
 const crypto  = require('crypto');
 const db      = require('../db');
 const { verifyJWT } = require('../middleware/auth');
+const { notifyDevisCreated, fire } = require('../lib/notifications');
 const router  = express.Router();
 
 // POST /api/devis — créer un devis et son lien unique
@@ -24,6 +25,7 @@ router.post('/', verifyJWT, async (req, res) => {
        description, montant_ht, tva_pct || 20, expire_at]
     );
     const d = rows[0];
+    fire(notifyDevisCreated, d.id); // email au client si une adresse est renseignée
     res.status(201).json({
       ...d,
       lien_unique: `${process.env.FRONTEND_URL}/p/${token}`,
