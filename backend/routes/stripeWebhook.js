@@ -1,6 +1,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const db     = require('../db');
 const { notifyPaid, fire } = require('../lib/notifications');
+const { issueFacture } = require('../services/factureService');
 
 // Frais Stripe réels lus sur la balance_transaction du compte connecté (direct charge).
 // Retourne null si indisponible → l'appelant retombe sur une estimation.
@@ -60,7 +61,10 @@ module.exports = async (req, res) => {
              statut='succeeded', paye_at=COALESCE(paiements.paye_at, NOW())`,
           [devis_id, pi.id, montant, commission, stripe_fees, montant - commission - stripe_fees]
         );
-        if (firstTime.length) fire(notifyPaid, devis_id);
+        if (firstTime.length) {
+          try { await issueFacture(devis_id); } catch (e) { console.error('[facture]', e.message); }
+          fire(notifyPaid, devis_id);
+        }
         break;
       }
 

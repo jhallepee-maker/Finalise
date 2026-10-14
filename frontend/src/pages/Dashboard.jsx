@@ -88,6 +88,7 @@ export default function Dashboard() {
             <span style={{ fontSize: 13, color: 'var(--fg2)' }}>
               {user?.prenom || user?.nom}
             </span>
+            <Link to="/profil" className="btn btn-ghost">Mon profil</Link>
             <button className="btn btn-ghost" onClick={logout}>Déconnexion</button>
           </div>
         </div>

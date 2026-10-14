@@ -172,6 +172,13 @@ export default function DevisDetail() {
           </div>
         )}
 
+        {devis.facture && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <strong style={{ fontSize: 14 }}>Facture {devis.facture.numero}</strong>{' '}
+            <a href={`${import.meta.env.VITE_API_URL || ''}/api/paiement/facture/${devis.token_unique}`} target="_blank" rel="noreferrer" style={{ fontSize: 14 }}>Télécharger (PDF)</a>
+          </div>
+        )}
+
         {/* Suppression */}
         {isWaiting && (
           <div style={{ marginBottom: 16 }}>
@@ -202,8 +209,17 @@ export default function DevisDetail() {
           <h3 style={{ marginBottom: 16 }}>Prestation</h3>
 
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: 'var(--fg2)', marginBottom: 4 }}>Description</div>
-            <div style={{ fontSize: 15, lineHeight: 1.6 }}>{devis.description}</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{devis.objet || 'Prestation'}</div>
+              {devis.numero && <div style={{ fontSize: 12, color: 'var(--fg3)', fontFamily: 'monospace' }}>{devis.numero}</div>}
+            </div>
+            {devis.date_prestation && <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>{devis.date_prestation}</div>}
+            {(devis.lignes || []).map((l, i) => (
+              <div className="line-item" key={i}>
+                <span className="line-item-label">{l.description}{Number(l.quantite) !== 1 ? ` × ${Number(l.quantite)}` : ''}</span>
+                <span className="line-item-value">{fmt(Number(l.quantite) * Number(l.prix_unitaire_ht))}</span>
+              </div>
+            ))}
           </div>
 
           {(devis.client_email || devis.client_tel) && (

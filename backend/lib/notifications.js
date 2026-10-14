@@ -1,6 +1,8 @@
 const db = require('./../db');
 const { sendMail } = require('./mailer');
 const { loadJustificatif, renderJustificatifPdf } = require('./justificatif');
+const { getFactureByToken } = require('../services/factureService');
+const { renderFacturePdf } = require('./facturePdf');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtEUR = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(Number(n));
@@ -67,7 +69,10 @@ async function notifyPaid(devisId) {
   let attachments;
   try {
     const j = await loadJustificatif(d.token_unique);
-    if (j) attachments = [{ filename: 'justificatif-signature.pdf', content: (await renderJustificatifPdf(j)).toString('base64') }];
+    attachments = [];
+    if (j) attachments.push({ filename: 'justificatif-signature.pdf', content: (await renderJustificatifPdf(j)).toString('base64') });
+    const f = await getFactureByToken(d.token_unique);
+    if (f) attachments.push({ filename: `${f.numero}.pdf`, content: (await renderFacturePdf(f)).toString('base64') });
   } catch (e) {
     console.error('[notify] PDF indisponible:', e.message);
   }
@@ -80,7 +85,7 @@ async function notifyPaid(devisId) {
         `<p>Bonjour${d.client_nom ? ' ' + esc(d.client_nom) : ''},</p>
          <p>Nous confirmons la réception de votre paiement de <strong>${fmtEUR(d.montant_ttc)}</strong> à ${esc(proName(d))} pour :</p>
          <p style="background:#f6f6f4;border-radius:8px;padding:12px 14px">${esc(d.description)}</p>
-         <p>Vous trouverez en pièce jointe le justificatif de votre signature électronique.</p>`),
+         <p>Vous trouverez en pièces jointes votre facture acquittée et le justificatif de votre signature électronique.</p>`),
       attachments,
     });
   }

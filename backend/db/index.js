@@ -7,4 +7,21 @@ const pool = new Pool({
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
+
+  // Transaction : fn reçoit un client dont .query() reste dans la même transaction.
+  // COMMIT si fn réussit, ROLLBACK si elle lève une erreur.
+  tx: async (fn) => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await fn(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw e;
+    } finally {
+      client.release();
+    }
+  },
 };

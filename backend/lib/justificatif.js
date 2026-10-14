@@ -37,12 +37,27 @@ function renderJustificatifPdf(r) {
 
     label('Prestataire');
     value(`${[r.pro_prenom, r.pro_nom].filter(Boolean).join(' ')}${r.pro_activite ? ' — ' + r.pro_activite : ''}${r.pro_siret ? '\nSIRET ' + r.pro_siret : ''}`);
+    const cl = snap.client || { nom: snap.client_nom || r.client_nom, email: snap.client_email || r.client_email };
     label('Client');
-    value(`${snap.client_nom || r.client_nom || '—'}${(snap.client_email || r.client_email) ? '\n' + (snap.client_email || r.client_email) : ''}`);
-    label('Prestation signée');
-    value(snap.description || r.description);
+    value([cl.nom, cl.email, cl.tel, cl.adresse].filter(Boolean).join('\n'));
+    label(`Prestation signée${snap.numero ? ' — devis ' + snap.numero : ''}`);
+    value([snap.objet, snap.date_prestation && `Date : ${snap.date_prestation}`].filter(Boolean).join('\n') || snap.description || r.description);
+    if (Array.isArray(snap.lignes)) {
+      doc.fontSize(10).fillColor('#111');
+      for (const l of snap.lignes)
+        doc.text(`• ${l.description} — ${Number(l.quantite)} × ${fmtEUR(l.prix_unitaire_ht)} HT`);
+      doc.moveDown(0.7);
+    }
     label('Montants');
     value(`HT ${fmtEUR(snap.montant_ht ?? r.montant_ht)}  ·  TVA ${snap.tva_pct ?? r.tva_pct} %  ·  TTC ${fmtEUR(snap.montant_ttc ?? r.montant_ttc)}`);
+    if (snap.cases) {
+      label('Cases cochées par le signataire');
+      value([
+        snap.cases.accept_devis && 'Lu et accepté le devis',
+        snap.cases.accept_cgv && `Lu et accepté les CGV (${snap.cgv_url})`,
+        snap.cases.accept_signature && 'Signature électronique (art. 1366 du Code civil)',
+      ].filter(Boolean).map(t => '☑ ' + t).join('\n').replace(/☑/g, '[x]'));
+    }
 
     doc.moveDown(0.5).strokeColor('#ddd').moveTo(56, doc.y).lineTo(539, doc.y).stroke().moveDown(1);
 

@@ -35,6 +35,7 @@ app.use('/api/devis/token', limiter(60 * 1000, 60));
 
 // Routes
 app.use('/api/auth',    require('./routes/auth'));
+app.use('/api/profil',  require('./routes/profil'));
 app.use('/api/devis',   require('./routes/devis'));
 app.use('/api/paiement',require('./routes/paiement'));
 app.use('/api/stripe',  require('./routes/stripe'));
