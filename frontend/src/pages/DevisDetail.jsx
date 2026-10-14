@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { showTtc, lineTotal } from '../pricing'
 import { calEvents, icsHref } from '../calendar'
-import { buildMessage, waLink, mailLink } from '../share'
+import { buildMessage, buildRelance, waLink, mailLink } from '../share'
 import api from '../api'
 
 const LABELS = {
@@ -106,6 +106,7 @@ export default function DevisDetail() {
               <a href={mailLink(devis, pro, texte)} className="btn btn-secondary" style={{ textDecoration: 'none' }}>Email</a>
               {navigator.share && <button className="btn btn-secondary" onClick={() => navigator.share({ title: 'Votre devis', text: texte }).catch(() => {})}>Partager…</button>}
               <button className="btn btn-secondary" onClick={copyLink}>{copied ? '✓ Lien copié' : 'Copier le lien'}</button>
+              {(isWaiting || devis.statut === 'signe') && <button className="btn btn-ghost" onClick={() => setMsg(buildRelance(devis, pro, publicUrl))}>Message de relance</button>}
               {msg !== null && <button className="btn btn-ghost" onClick={() => setMsg(null)}>Réinitialiser</button>}
             </div>
             <input id="lien-client" readOnly value={publicUrl} style={{ marginTop: 10, fontSize: 12 }} onFocus={e => e.target.select()} aria-label="Lien" />

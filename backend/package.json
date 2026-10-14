@@ -4,6 +4,7 @@
   "description": "Backend Finalise — plateforme de finalisation de paiements pour indépendants",
   "main": "server.js",
   "scripts": {
+    "test": "node --test test/flow.test.js",
     "start": "node server.js",
     "dev": "nodemon server.js"
   },

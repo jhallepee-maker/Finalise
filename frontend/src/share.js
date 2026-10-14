@@ -35,3 +35,15 @@ export const mailLink = (devis, pro, texte) => {
   const sujet = `Votre devis${devis.objet ? ' — ' + devis.objet : ''}${devis.numero ? ' (' + devis.numero + ')' : ''}`
   return `mailto:${devis.client_email ? encodeURIComponent(devis.client_email) : ''}?subject=${encodeURIComponent(sujet)}&body=${encodeURIComponent(texte)}`
 }
+
+// Message de relance (devis envoyé mais pas signé, ou signé mais pas payé)
+export function buildRelance(devis, pro, url) {
+  const prenom = (devis.client_nom || '').trim().split(/\s+/)[0]
+  const objet = devis.objet ? `« ${devis.objet} »` : 'votre prestation'
+  const etape = devis.statut === 'signe' ? 'il ne reste que le paiement pour confirmer' : 'il reste à le signer et à le régler pour confirmer'
+  const exp = devis.expire_at ? ` Le lien est valable jusqu'au ${new Date(devis.expire_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}.` : ''
+  const l = [prenom ? `Bonjour ${prenom},` : 'Bonjour,', '', `Un petit rappel pour ${objet} : ${etape}.${exp}`, url, '', 'Belle journée,']
+  const nom = [pro?.prenom, pro?.nom].filter(Boolean).join(' ')
+  if (nom) l.push(nom)
+  return l.join('\n')
+}
