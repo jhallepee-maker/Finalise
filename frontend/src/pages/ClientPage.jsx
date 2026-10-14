@@ -6,10 +6,14 @@ import api from '../api'
 
 const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
 
-// Stripe instance — chargée une seule fois
-const stripePromise = import.meta.env.VITE_STRIPE_PUBLIC_KEY
-  ? loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY)
-  : null
+// Direct charge : une instance Stripe par compte connecté (mise en cache)
+const stripeCache = {}
+const getStripe = (account) => {
+  const key = import.meta.env.VITE_STRIPE_PUBLIC_KEY
+  if (!key || !account) return null
+  if (!stripeCache[account]) stripeCache[account] = loadStripe(key, { stripeAccount: account })
+  return stripeCache[account]
+}
 
 // ─── Formulaire paiement Stripe ───────────────────────────
 function PaymentForm({ devis, onSuccess }) {
@@ -87,6 +91,7 @@ export default function ClientPage() {
   const [error, setError]           = useState('')
   const [step, setStep]             = useState('view') // view | sign | pay | done
   const [clientSecret, setClientSecret] = useState(null)
+  const [stripeAccount, setStripeAccount] = useState(null)
 
   // Signature
   const [nomSigne, setNomSigne]   = useState('')
@@ -113,6 +118,7 @@ export default function ClientPage() {
     try {
       const { data } = await api.post('/api/stripe/create-payment-intent', { token })
       setClientSecret(data.client_secret)
+      setStripeAccount(data.stripe_account)
       setStep('pay')
     } catch (err) {
       // Pro pas encore connecté à Stripe → afficher message
@@ -242,7 +248,7 @@ export default function ClientPage() {
       )}
 
       {/* Étape : paiement Stripe */}
-      {step === 'pay' && clientSecret && stripePromise && (
+      {step === 'pay' && clientSecret && getStripe(stripeAccount) && (
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
             <span style={{ color: 'var(--green)', fontSize: 18 }}>✓</span>
@@ -253,7 +259,7 @@ export default function ClientPage() {
               <div className="montant-display">{fmt(devis.montant_ttc)}</div>
               <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>à régler maintenant</div>
             </div>
-            <Elements stripe={stripePromise} options={stripeOptions}>
+            <Elements stripe={getStripe(stripeAccount)} options={stripeOptions}>
               <PaymentForm devis={devis} onSuccess={() => setStep('done')} />
             </Elements>
           </div>

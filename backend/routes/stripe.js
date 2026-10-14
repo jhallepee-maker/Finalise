@@ -45,14 +45,18 @@ router.post('/create-payment-intent', async (req, res) => {
   const commission = Math.round(montant_centimes * COMMISSION_PCT);
 
   try {
-    const pi = await stripe.paymentIntents.create({
-      amount: montant_centimes,
-      currency: 'eur',
-      application_fee_amount: commission,
-      transfer_data: { destination: d.stripe_account_id },
-      metadata: { devis_id: d.id, token },
-    });
-    res.json({ client_secret: pi.client_secret });
+    // Direct charge : le PaymentIntent vit sur le compte du pro (marchand officiel,
+    // paie les frais Stripe, gère litiges/remboursements). La commission reste prélevée.
+    const pi = await stripe.paymentIntents.create(
+      {
+        amount: montant_centimes,
+        currency: 'eur',
+        application_fee_amount: commission,
+        metadata: { devis_id: d.id, token },
+      },
+      { stripeAccount: d.stripe_account_id }
+    );
+    res.json({ client_secret: pi.client_secret, stripe_account: d.stripe_account_id });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
