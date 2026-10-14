@@ -13,6 +13,45 @@ const r2 = n => Math.round(n * 100) / 100;
 const str = (v, max = 255) => String(v ?? '').trim().slice(0, max);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
+// ─── Dates (journée entière ou créneau) ─────────────────────
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+function labelDate(o) {
+  const d = new Date(o.date + 'T12:00:00Z');
+  const jour = d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const cap = jour.charAt(0).toUpperCase() + jour.slice(1);
+  return o.mode === 'creneau'
+    ? `${cap}, de ${o.debut.replace(':', 'h')} à ${o.fin.replace(':', 'h')}`
+    : `${cap}, journée entière`;
+}
+
+function parseDates(body) {
+  const raw = Array.isArray(body.dates) ? body.dates : [];
+  if (!raw.length) throw new HttpError(400, 'Indiquez au moins une date pour la sortie (elle conditionne le droit de rétractation du client).');
+  if (raw.length > 10) throw new HttpError(400, '10 dates maximum');
+  const today = new Date().toISOString().slice(0, 10);
+  const seen = new Set();
+  const out = raw.map((x, i) => {
+    const date = str(x.date, 10);
+    if (!DATE_RE.test(date) || isNaN(new Date(date + 'T12:00:00Z'))) throw new HttpError(400, `Date ${i + 1} invalide`);
+    if (date < today) throw new HttpError(400, `Date ${i + 1} : elle est déjà passée`);
+    const mode = x.mode === 'creneau' ? 'creneau' : 'journee';
+    const o = { date, mode };
+    if (mode === 'creneau') {
+      const debut = str(x.debut, 5), fin = str(x.fin, 5);
+      if (!TIME_RE.test(debut) || !TIME_RE.test(fin)) throw new HttpError(400, `Date ${i + 1} : heures de début et de fin requises (HH:MM)`);
+      if (fin <= debut) throw new HttpError(400, `Date ${i + 1} : la fin doit être après le début`);
+      o.debut = debut; o.fin = fin;
+    }
+    const key = `${o.date}|${o.mode}|${o.debut || ''}|${o.fin || ''}`;
+    if (seen.has(key)) throw new HttpError(400, `Date ${i + 1} en double`);
+    seen.add(key);
+    return o;
+  });
+  return out.sort((a, b) => (a.date + (a.debut || '')).localeCompare(b.date + (b.debut || '')));
+}
+
 // ─── Lignes ──────────────────────────────────────────────────
 function parseLignes(body) {
   let lignes = body.lignes;
@@ -27,11 +66,11 @@ function parseLignes(body) {
   return lignes.map((l, i) => {
     const description = str(l.description, 500);
     const quantite = Number(l.quantite);
-    const prix = Number(l.prix_unitaire_ht);
+    const prix = Number(l.prix ?? l.prix_unitaire_ht);
     if (!description) throw new HttpError(400, `Ligne ${i + 1} : description manquante`);
     if (!(quantite > 0) || quantite > 10000) throw new HttpError(400, `Ligne ${i + 1} : quantité invalide`);
     if (!(prix >= 0) || prix > 1e6) throw new HttpError(400, `Ligne ${i + 1} : prix invalide`);
-    return { description, quantite: r2(quantite), prix_unitaire_ht: r2(prix) };
+    return { description, quantite: r2(quantite), prix: r2(prix) };
   });
 }
 
@@ -42,18 +81,38 @@ async function createDevis(proId, body) {
   if (!pro) throw new HttpError(401, 'Compte introuvable');
   if (!pro.adresse || !pro.siret)
     throw new HttpError(422, 'Complétez votre profil (adresse et SIRET) avant de créer un devis.', { code: 'PROFIL_INCOMPLET' });
+  if (!pro.cgv_version_id && !pro.cgv_url)
+    throw new HttpError(422, 'Ajoutez vos conditions générales de vente (PDF) dans votre profil avant de créer un devis.', { code: 'PROFIL_INCOMPLET' });
 
-  const lignes = parseLignes(body);
-  const montant_ht = r2(lignes.reduce((s, l) => s + l.quantite * l.prix_unitaire_ht, 0));
-  if (!(montant_ht > 0)) throw new HttpError(400, 'Le total du devis doit être supérieur à 0');
 
-  const date_prestation = str(body.date_prestation, 120);
-  if (!date_prestation)
-    throw new HttpError(400, 'Indiquez la date de la prestation (elle conditionne le droit de rétractation du client).');
+  const dates = parseDates(body);
+  const date_prestation = dates.length === 1
+    ? labelDate(dates[0]).slice(0, 120)
+    : ('Au choix : ' + dates.map(labelDate).join(' ou ')).slice(0, 500);
+  const participants_max = Math.floor(Number(body.participants_max));
+  if (!(participants_max >= 1) || participants_max > 200)
+    throw new HttpError(400, 'Indiquez le nombre maximum de participants (1 à 200)');
 
   // Franchise en base de TVA : toujours 0 %
   const tvaIn = Number(body.tva_pct ?? 20);
   const tva_pct = pro.tva_franchise ? 0 : (TVA_VALUES.includes(tvaIn) ? tvaIn : 20);
+
+  // Prix saisis en TTC (montant final) ou en HT. Le total payé est exactement le montant final annoncé.
+  const prix_mode = body.prix_mode === 'ht' && !pro.tva_franchise ? 'ht' : 'ttc';
+  const saisies = parseLignes(body);
+  const f = 1 + tva_pct / 100;
+  let montant_ht, montant_ttc;
+  if (prix_mode === 'ttc') {
+    montant_ttc = r2(saisies.reduce((s, l) => s + l.quantite * l.prix, 0));
+    montant_ht = r2(montant_ttc - r2(montant_ttc - montant_ttc / f));
+  } else {
+    montant_ht = r2(saisies.reduce((s, l) => s + l.quantite * l.prix, 0));
+    montant_ttc = r2(montant_ht * f);
+  }
+  if (!(montant_ttc > 0)) throw new HttpError(400, 'Le total du devis doit être supérieur à 0');
+  const lignes = saisies.map(l => prix_mode === 'ttc'
+    ? { description: l.description, quantite: l.quantite, prix_unitaire_ttc: l.prix, prix_unitaire_ht: Math.round(l.prix / f * 10000) / 10000 }
+    : { description: l.description, quantite: l.quantite, prix_unitaire_ht: l.prix, prix_unitaire_ttc: r2(l.prix * f) });
 
   const requis = Array.isArray(body.champs_requis)
     ? body.champs_requis.filter(k => CHAMPS[k])
@@ -73,27 +132,28 @@ async function createDevis(proId, body) {
     const numero = await nextNumero(tx, proId, 'devis');
     const { rows } = await tx.query(
       `INSERT INTO devis (pro_id, token_unique, numero, objet, date_prestation, description,
-         client_nom, client_email, client_tel, client_adresse, montant_ht, tva_pct, expire_at, champs_requis)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING *`,
+         client_nom, client_email, client_tel, client_adresse, montant_ht, tva_pct, expire_at, champs_requis,
+         dates, participants_max, montant_ttc, prix_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18) RETURNING *`,
       [proId, token, numero, objet || null, date_prestation, description,
        str(body.client_nom) || null, email || null, str(body.client_tel, 30) || null, str(body.client_adresse, 500) || null,
-       montant_ht, tva_pct, expire_at, JSON.stringify(requis)]
+       montant_ht, tva_pct, expire_at, JSON.stringify(requis), JSON.stringify(dates), participants_max, montant_ttc, prix_mode]
     );
     const devis = rows[0];
     for (let i = 0; i < lignes.length; i++) {
       await tx.query(
-        `INSERT INTO devis_lignes (devis_id, position, description, quantite, prix_unitaire_ht) VALUES ($1,$2,$3,$4,$5)`,
-        [devis.id, i, lignes[i].description, lignes[i].quantite, lignes[i].prix_unitaire_ht]
+        `INSERT INTO devis_lignes (devis_id, position, description, quantite, prix_unitaire_ht, prix_unitaire_ttc) VALUES ($1,$2,$3,$4,$5,$6)`,
+        [devis.id, i, lignes[i].description, lignes[i].quantite, lignes[i].prix_unitaire_ht, lignes[i].prix_unitaire_ttc]
       );
     }
-    return { ...devis, lignes, lien_unique: `${process.env.FRONTEND_URL}/p/${token}` };
+    return { ...devis, lignes, dates, lien_unique: `${process.env.FRONTEND_URL}/p/${token}` };
   });
 }
 
 // ─── Lecture ─────────────────────────────────────────────────
 async function getLignes(devisId) {
   const { rows } = await db.query(
-    `SELECT description, quantite, prix_unitaire_ht FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [devisId]
+    `SELECT description, quantite, prix_unitaire_ht, prix_unitaire_ttc FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [devisId]
   );
   return rows;
 }
@@ -101,7 +161,7 @@ async function getLignes(devisId) {
 // Vue publique pour le client (lien unique). Retourne null si introuvable.
 async function getPublicDevis(token) {
   const { rows } = await db.query(
-    `SELECT d.*, p.nom AS pro_nom, p.prenom AS pro_prenom, p.activite, p.cgv_url, p.tva_franchise
+    `SELECT d.*, p.nom AS pro_nom, p.prenom AS pro_prenom, p.activite, p.cgv_url, p.cgv_version_id AS pro_cgv_version, p.tva_franchise
        FROM devis d JOIN pros p ON d.pro_id = p.id WHERE d.token_unique=$1`, [token]
   );
   const d = rows[0];
@@ -110,15 +170,20 @@ async function getPublicDevis(token) {
     throw new HttpError(410, 'Lien expiré');
   let lignes = await getLignes(d.id);
   // Devis créés avant la V1 : une seule ligne synthétique
-  if (!lignes.length) lignes = [{ description: d.description, quantite: 1, prix_unitaire_ht: d.montant_ht }];
+  if (!lignes.length) lignes = [{ description: d.description, quantite: 1, prix_unitaire_ht: d.montant_ht, prix_unitaire_ttc: d.montant_ttc }];
   return {
     id: d.id, token_unique: d.token_unique, numero: d.numero, objet: d.objet || null,
     description: d.description, date_prestation: d.date_prestation, lignes,
-    montant_ht: d.montant_ht, tva_pct: d.tva_pct, montant_ttc: d.montant_ttc,
+    montant_ht: d.montant_ht, tva_pct: d.tva_pct, montant_ttc: d.montant_ttc, prix_mode: d.prix_mode || 'ht',
     tva_franchise: !!d.tva_franchise,
     statut: d.statut, expire_at: d.expire_at,
     pro_nom: [d.pro_prenom, d.pro_nom].filter(Boolean).join(' '), activite: d.activite,
     cgv_url: d.cgv_url || null,
+    cgv_pdf: !!(d.cgv_version_id || d.pro_cgv_version),
+    has_cgv: !!(d.cgv_url || d.cgv_version_id || d.pro_cgv_version),
+    dates: (Array.isArray(d.dates) ? d.dates : []).map(o => ({ ...o, label: labelDate(o) })),
+    participants_max: d.participants_max || 1,
+    date_choisie: d.date_choisie || null, participants_nb: d.participants_nb || null,
     champs_requis: Array.isArray(d.champs_requis) ? d.champs_requis : DEFAULT_REQUIS,
     client: { nom: d.client_nom || '', email: d.client_email || '', tel: d.client_tel || '', adresse: d.client_adresse || '' },
   };
@@ -129,7 +194,7 @@ async function getPublicDevis(token) {
 async function signDevis(token, body, ip, ua) {
   return db.tx(async tx => {
     const { rows } = await tx.query(
-      `SELECT d.*, p.cgv_url FROM devis d JOIN pros p ON d.pro_id=p.id WHERE d.token_unique=$1 FOR UPDATE OF d`, [token]
+      `SELECT d.*, p.cgv_url, p.cgv_version_id AS pro_cgv_version FROM devis d JOIN pros p ON d.pro_id=p.id WHERE d.token_unique=$1 FOR UPDATE OF d`, [token]
     );
     const d = rows[0];
     if (!d) throw new HttpError(404, 'Devis introuvable');
@@ -154,30 +219,53 @@ async function signDevis(token, body, ip, ua) {
     const cases = { accept_devis: c.accept_devis === true, accept_cgv: c.accept_cgv === true, accept_signature: c.accept_signature === true };
     const casesManquantes = [];
     if (!cases.accept_devis) casesManquantes.push('accept_devis');
-    if (d.cgv_url && !cases.accept_cgv) casesManquantes.push('accept_cgv');
+    let cgv = null; // version PDF des CGV proposée au moment de la signature
+    if (d.pro_cgv_version) {
+      const { rows: cv } = await tx.query('SELECT id, nom, hash FROM cgv_versions WHERE id=$1', [d.pro_cgv_version]);
+      cgv = cv[0] || null;
+    }
+    if ((d.cgv_url || cgv) && !cases.accept_cgv) casesManquantes.push('accept_cgv');
     if (!cases.accept_signature) casesManquantes.push('accept_signature');
     if (casesManquantes.length)
       throw new HttpError(400, 'Veuillez cocher toutes les cases obligatoires', { cases_manquantes: casesManquantes });
 
+    // Date (si plusieurs options) et nombre de participants
+    const options = Array.isArray(d.dates) ? d.dates : [];
+    let choisie = null;
+    if (options.length === 1) choisie = options[0];
+    else if (options.length > 1) {
+      const c = body.date_choisie || {};
+      choisie = options.find(o => o.date === c.date && o.mode === c.mode && (o.debut || '') === (c.debut || '') && (o.fin || '') === (c.fin || ''));
+      if (!choisie) throw new HttpError(400, 'Choisissez la date de votre sortie', { champs_manquants: ['date'] });
+    }
+    const max = d.participants_max || 1;
+    const nb = max === 1 ? 1 : Math.floor(Number(body.participants_nb));
+    if (!(nb >= 1) || nb > max)
+      throw new HttpError(400, `Indiquez le nombre de participants (1 à ${max})`, { champs_manquants: ['participants'] });
+    const datePrestation = choisie ? labelDate(choisie) : d.date_prestation;
+
     const { rows: lr } = await tx.query(
-      `SELECT description, quantite, prix_unitaire_ht FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [d.id]
+      `SELECT description, quantite, prix_unitaire_ht, prix_unitaire_ttc FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [d.id]
     );
-    const lignes = (lr.length ? lr : [{ description: d.description, quantite: 1, prix_unitaire_ht: d.montant_ht }])
-      .map(l => ({ description: l.description, quantite: String(l.quantite), prix_unitaire_ht: String(l.prix_unitaire_ht) }));
+    const lignes = (lr.length ? lr : [{ description: d.description, quantite: 1, prix_unitaire_ht: d.montant_ht, prix_unitaire_ttc: d.montant_ttc }])
+      .map(l => ({ description: l.description, quantite: String(l.quantite), prix_unitaire_ht: String(l.prix_unitaire_ht), prix_unitaire_ttc: l.prix_unitaire_ttc == null ? null : String(l.prix_unitaire_ttc) }));
 
     // Ce que le client a vu et signé — l'ordre des clés est fixe (hash stable)
     const snapshot = {
       devis_id: d.id, numero: d.numero, pro_id: d.pro_id,
-      objet: d.objet, date_prestation: d.date_prestation, description: d.description, lignes,
+      objet: d.objet, date_prestation: datePrestation, participants: nb, participants_max: max, description: d.description, lignes,
+      prix_mode: d.prix_mode || 'ht',
       montant_ht: String(d.montant_ht), tva_pct: String(d.tva_pct), montant_ttc: String(d.montant_ttc),
       client: { nom: client.nom, email: client.email, tel: client.tel, adresse: client.adresse },
-      cgv_url: d.cgv_url || null, cases,
+      cgv_url: d.cgv_url || null, cgv_nom: cgv ? cgv.nom : null, cgv_hash: cgv ? cgv.hash : null, cases,
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
 
     await tx.query(
-      `UPDATE devis SET statut='signe', client_nom=$2, client_email=$3, client_tel=$4, client_adresse=$5 WHERE id=$1`,
-      [d.id, client.nom, client.email || null, client.tel || null, client.adresse || null]
+      `UPDATE devis SET statut='signe', client_nom=$2, client_email=$3, client_tel=$4, client_adresse=$5,
+         date_prestation=$6, date_choisie=$7::jsonb, participants_nb=$8, cgv_version_id=$9 WHERE id=$1`,
+      [d.id, client.nom, client.email || null, client.tel || null, client.adresse || null,
+       datePrestation, choisie ? JSON.stringify(choisie) : null, nb, cgv ? cgv.id : null]
     );
     const nom_signe = str(body.nom_signe) || client.nom;
     const { rows: sg } = await tx.query(

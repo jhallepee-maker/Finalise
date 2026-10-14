@@ -41,11 +41,14 @@ function renderJustificatifPdf(r) {
     label('Client');
     value([cl.nom, cl.email, cl.tel, cl.adresse].filter(Boolean).join('\n'));
     label(`Prestation signée${snap.numero ? ' — devis ' + snap.numero : ''}`);
-    value([snap.objet, snap.date_prestation && `Date : ${snap.date_prestation}`].filter(Boolean).join('\n') || snap.description || r.description);
+    value([snap.objet, snap.date_prestation && `Date : ${snap.date_prestation}`, snap.participants && `Participants : ${snap.participants}`].filter(Boolean).join('\n') || snap.description || r.description);
     if (Array.isArray(snap.lignes)) {
       doc.fontSize(10).fillColor('#111');
-      for (const l of snap.lignes)
-        doc.text(`• ${l.description} — ${Number(l.quantite)} × ${fmtEUR(l.prix_unitaire_ht)} HT`);
+      const ttc = snap.prix_mode === 'ttc';
+      for (const l of snap.lignes) {
+        const u = ttc && l.prix_unitaire_ttc != null ? l.prix_unitaire_ttc : l.prix_unitaire_ht;
+        doc.text(`• ${l.description} — ${Number(l.quantite)} × ${fmtEUR(u)} ${ttc ? 'TTC' : 'HT'}`);
+      }
       doc.moveDown(0.7);
     }
     label('Montants');
@@ -54,7 +57,7 @@ function renderJustificatifPdf(r) {
       label('Cases cochées par le signataire');
       value([
         snap.cases.accept_devis && 'Lu et accepté le devis',
-        snap.cases.accept_cgv && `Lu et accepté les CGV (${snap.cgv_url})`,
+        snap.cases.accept_cgv && `Lu et accepté les CGV (${snap.cgv_nom ? 'PDF « ' + snap.cgv_nom + ' », empreinte SHA-256 ' + snap.cgv_hash : snap.cgv_url})`,
         snap.cases.accept_signature && 'Signature électronique (art. 1366 du Code civil)',
       ].filter(Boolean).map(t => '☑ ' + t).join('\n').replace(/☑/g, '[x]'));
     }

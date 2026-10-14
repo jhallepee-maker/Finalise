@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { showTtc, lineTotal } from '../pricing'
 import api from '../api'
 
 const LABELS = {
@@ -64,6 +65,7 @@ export default function DevisDetail() {
     return `mailto:${to}?subject=${subject}&body=${body}`
   }
 
+  const pv = { prix_mode: devis.prix_mode, tva_franchise: Number(devis.tva_pct) === 0 }
   const isPaid    = devis.statut === 'paye'
   const isSigned  = devis.statut === 'signe' || isPaid
   const isExpire  = devis.statut === 'expire'
@@ -214,10 +216,15 @@ export default function DevisDetail() {
               {devis.numero && <div style={{ fontSize: 12, color: 'var(--fg3)', fontFamily: 'monospace' }}>{devis.numero}</div>}
             </div>
             {devis.date_prestation && <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>{devis.date_prestation}</div>}
+            {devis.participants_max > 0 && (
+              <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 2 }}>
+                {devis.participants_nb ? `${devis.participants_nb} participant${devis.participants_nb > 1 ? 's' : ''}` : 'Participants : à indiquer par le client'} · maximum {devis.participants_max}
+              </div>
+            )}
             {(devis.lignes || []).map((l, i) => (
               <div className="line-item" key={i}>
                 <span className="line-item-label">{l.description}{Number(l.quantite) !== 1 ? ` × ${Number(l.quantite)}` : ''}</span>
-                <span className="line-item-value">{fmt(Number(l.quantite) * Number(l.prix_unitaire_ht))}</span>
+                <span className="line-item-value">{fmt(lineTotal(l, pv))}</span>
               </div>
             ))}
           </div>
@@ -241,18 +248,20 @@ export default function DevisDetail() {
 
           <hr className="divider" />
 
-          <div className="line-item">
-            <span className="line-item-label">Montant HT</span>
-            <span className="line-item-value">{fmt(devis.montant_ht)}</span>
-          </div>
-          <div className="line-item">
-            <span className="line-item-label">TVA {Number(devis.tva_pct)} %</span>
-            <span className="line-item-value">{fmt(devis.montant_ttc - devis.montant_ht)}</span>
-          </div>
-          <div className="line-item line-item-total">
-            <span className="line-item-label">Total TTC</span>
-            <span className="line-item-value">{fmt(devis.montant_ttc)}</span>
-          </div>
+          {pv.tva_franchise ? (
+            <div className="line-item line-item-total"><span className="line-item-label">Total à payer (sans TVA)</span><span className="line-item-value">{fmt(devis.montant_ttc)}</span></div>
+          ) : showTtc(pv) ? (
+            <>
+              <div className="line-item line-item-total"><span className="line-item-label">Total TTC</span><span className="line-item-value">{fmt(devis.montant_ttc)}</span></div>
+              <div className="form-hint">dont TVA {Number(devis.tva_pct)} % : {fmt(devis.montant_ttc - devis.montant_ht)}</div>
+            </>
+          ) : (
+            <>
+              <div className="line-item"><span className="line-item-label">Montant HT</span><span className="line-item-value">{fmt(devis.montant_ht)}</span></div>
+              <div className="line-item"><span className="line-item-label">TVA {Number(devis.tva_pct)} %</span><span className="line-item-value">{fmt(devis.montant_ttc - devis.montant_ht)}</span></div>
+              <div className="line-item line-item-total"><span className="line-item-label">Total TTC</span><span className="line-item-value">{fmt(devis.montant_ttc)}</span></div>
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -17,12 +17,12 @@ function StatTile({ label, value, sub, accent }) {
     <div style={{
       flex: 1, minWidth: 0,
       padding: '16px 18px',
-      background: 'var(--bg)',
+      background: 'var(--surface)',
       border: '1px solid var(--border)',
-      borderRadius: 12,
+      borderRadius: 10,
       boxShadow: 'var(--shadow)',
     }}>
-      <div style={{ fontSize: 11, color: 'var(--fg3)', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: 'var(--fg3)', marginBottom: 6 }}>
         {label}
       </div>
       <div style={{

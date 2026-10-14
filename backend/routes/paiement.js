@@ -48,4 +48,17 @@ router.get('/facture/:token', handle(async (req, res) => {
   res.send(pdf);
 }));
 
+// GET /api/paiement/cgv/:token — CGV (PDF) du devis : la version acceptée si signé, sinon la version actuelle du pro
+router.get('/cgv/:token', handle(async (req, res) => {
+  const { rows } = await db.query(
+    `SELECT COALESCE(d.cgv_version_id, p.cgv_version_id) AS vid FROM devis d JOIN pros p ON p.id=d.pro_id WHERE d.token_unique=$1`,
+    [req.params.token]);
+  if (!rows[0] || !rows[0].vid) throw new HttpError(404, 'Aucune CGV pour ce devis');
+  const { rows: v } = await db.query('SELECT nom, pdf FROM cgv_versions WHERE id=$1', [rows[0].vid]);
+  if (!v[0]) throw new HttpError(404, 'CGV introuvables');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${String(v[0].nom).replace(/"/g, '')}"`);
+  res.send(v[0].pdf);
+}));
+
 module.exports = router;

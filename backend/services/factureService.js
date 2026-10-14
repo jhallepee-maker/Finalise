@@ -17,14 +17,14 @@ async function issueFacture(devisId) {
     if (!d || d.statut !== 'paye') return null;
 
     const { rows: lr } = await tx.query(
-      `SELECT description, quantite, prix_unitaire_ht FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [devisId]
+      `SELECT description, quantite, prix_unitaire_ht, prix_unitaire_ttc FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [devisId]
     );
-    const lignes = (lr.length ? lr : [{ description: d.description, quantite: 1, prix_unitaire_ht: d.montant_ht }])
-      .map(l => ({ description: l.description, quantite: String(l.quantite), prix_unitaire_ht: String(l.prix_unitaire_ht) }));
+    const lignes = (lr.length ? lr : [{ description: d.description, quantite: 1, prix_unitaire_ht: d.montant_ht, prix_unitaire_ttc: d.montant_ttc }])
+      .map(l => ({ description: l.description, quantite: String(l.quantite), prix_unitaire_ht: String(l.prix_unitaire_ht), prix_unitaire_ttc: l.prix_unitaire_ttc == null ? null : String(l.prix_unitaire_ttc) }));
     const { rows: pay } = await tx.query('SELECT paye_at FROM paiements WHERE devis_id=$1', [devisId]);
 
     const snapshot = {
-      devis_numero: d.numero, objet: d.objet, date_prestation: d.date_prestation, lignes,
+      devis_numero: d.numero, objet: d.objet, date_prestation: d.date_prestation, participants: d.participants_nb, prix_mode: d.prix_mode || 'ht', lignes,
       pro: {
         nom: [d.prenom, d.nom].filter(Boolean).join(' '), activite: d.activite, siret: d.siret,
         adresse: [d.adresse, [d.code_postal, d.ville].filter(Boolean).join(' ')].filter(Boolean).join(', '),

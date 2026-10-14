@@ -23,18 +23,22 @@ function renderFacturePdf(f) {
     doc.fontSize(10).fillColor('#111').text([cl.nom, cl.adresse, cl.email, cl.tel].filter(Boolean).join('\n'), 320, top + 12, { width: 220 });
     doc.x = 56; doc.y = Math.max(doc.y, top + 90);
 
-    if (s.objet || s.date_prestation) {
+    if (s.objet || s.date_prestation || s.participants) {
       doc.moveDown(0.5).fontSize(10).fillColor('#111');
       if (s.objet) doc.text(`Objet : ${s.objet}`);
       if (s.date_prestation) doc.text(`Date de la prestation : ${s.date_prestation}`);
+      if (s.participants) doc.text(`Participants : ${s.participants}`);
     }
     doc.moveDown(1);
 
     // Tableau des lignes
     const col = { d: 56, q: 330, p: 380, t: 460 };
+    const ttcMode = s.prix_mode === 'ttc' || pro.tva_franchise;
+    const sfx = pro.tva_franchise ? '' : (ttcMode ? ' TTC' : ' HT');
+    const unit = l => Number(ttcMode && l.prix_unitaire_ttc != null ? l.prix_unitaire_ttc : l.prix_unitaire_ht);
     doc.fontSize(8).fillColor('#777');
     const hy = doc.y;
-    doc.text('DESCRIPTION', col.d, hy).text('QTÉ', col.q, hy).text('PU HT', col.p, hy).text('TOTAL HT', col.t, hy);
+    doc.text('DESCRIPTION', col.d, hy).text('QTÉ', col.q, hy).text('PU' + sfx, col.p, hy).text('TOTAL' + sfx, col.t, hy);
     doc.moveTo(56, hy + 12).lineTo(539, hy + 12).strokeColor('#ddd').stroke();
     doc.y = hy + 18;
     doc.fontSize(10).fillColor('#111');
@@ -42,8 +46,8 @@ function renderFacturePdf(f) {
       const y = doc.y;
       doc.text(l.description, col.d, y, { width: 260 });
       const h = doc.y;
-      doc.text(String(Number(l.quantite)), col.q, y).text(eur(l.prix_unitaire_ht), col.p, y, { width: 75 })
-         .text(eur(Number(l.quantite) * Number(l.prix_unitaire_ht)), col.t, y, { width: 80 });
+      doc.text(String(Number(l.quantite)), col.q, y).text(eur(unit(l)), col.p, y, { width: 75 })
+         .text(eur(Number(l.quantite) * unit(l)), col.t, y, { width: 80 });
       doc.y = Math.max(h, y + 14) + 4;
     }
     doc.moveTo(56, doc.y).lineTo(539, doc.y).strokeColor('#ddd').stroke();
@@ -56,9 +60,13 @@ function renderFacturePdf(f) {
          .text(a, 330, y, { width: 120 }).text(b, 450, y, { width: 89, align: 'right' });
       doc.y = y + (bold ? 20 : 16);
     };
-    row('Total HT', eur(f.montant_ht));
-    row(pro.tva_franchise ? 'TVA' : `TVA ${Number(f.tva_pct)} %`, pro.tva_franchise ? 'non applicable' : eur(tva));
-    row('Total TTC', eur(f.montant_ttc), true);
+    if (pro.tva_franchise) {
+      row('Total net à payer', eur(f.montant_ttc), true);
+    } else {
+      row('Total HT', eur(f.montant_ht));
+      row(`TVA ${Number(f.tva_pct)} %`, eur(tva));
+      row('Total TTC', eur(f.montant_ttc), true);
+    }
     doc.font('Helvetica').moveDown(1);
 
     doc.x = 56;
