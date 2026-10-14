@@ -89,6 +89,11 @@ export default function DevisDetail() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
           <h1 style={{ margin: 0 }}>{devis.client_nom || 'Client sans nom'}</h1>
           <span className={`badge badge-${devis.statut}`}>{LABELS[devis.statut]}</span>
+          {devis.assurance_choix === 'oui' && (
+            <span className="badge" title="Assurance annulation Meetch">
+              Assuré · {{ subscribed: 'contrat émis', error: 'souscription à relancer', claim_opened: 'sinistre ouvert', claim_refused: 'sinistre refusé', refunded: 'client remboursé' }[devis.meetch_status] || 'en attente de paiement'}
+            </span>
+          )}
         </div>
         <div style={{ fontSize: 13, color: 'var(--fg2)', marginBottom: 24 }}>
           Créé le {fmtDate(devis.created_at)}

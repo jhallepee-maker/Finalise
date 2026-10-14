@@ -36,7 +36,7 @@ function buildSubscription(d, dates) {
   return {
     order_date: iso(new Date()), product_id: process.env.MEETCH_PRODUCT_ID, order_reference: d.numero || d.id,
     paid: true, currency: 'EUR', preferred_locale: d.cgv_langue === 'en' ? 'en_US' : 'fr_FR',
-    buyer_firstname: (prenom || '').slice(0, 50), buyer_lastname: (reste.join(' ') || prenom || '').slice(0, 50), buyer_email: d.client_email, buyer_phone: d.client_tel || undefined,
+    buyer_firstname: (prenom || '').slice(0, 50), buyer_lastname: (reste.join(' ') || prenom || '').slice(0, 50), buyer_email: d.client_email, buyer_phone: d.client_tel || undefined, buyer_address: d.client_adresse ? String(d.client_adresse).slice(0, 100) : undefined,
     order_amount: Number(d.montant_ttc), insurance_amount: Number(d.assurance_montant),
     contract_date_start: ev(first), contract_date_end: ev(last),
     items: [{ number: String(d.numero || d.id), label: String(d.objet || d.description || 'Prestation').slice(0, 100), price: Number(d.montant_ttc),
