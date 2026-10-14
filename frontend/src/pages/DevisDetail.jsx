@@ -164,6 +164,7 @@ export default function DevisDetail() {
         )}
 
         <div style={{ marginBottom: 16 }}>
+          {isWaiting && <button className="btn btn-secondary" style={{ marginRight: 8 }} onClick={() => nav('/devis/new', { state: { edit: devis } })}>Modifier</button>}
           <button className="btn btn-secondary" onClick={() => nav('/devis/new', { state: { from: devis } })}>Dupliquer ce devis</button>
         </div>
 

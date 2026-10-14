@@ -16,19 +16,25 @@ const emptyDate = () => ({ date: '', mode: 'journee', debut: '08:00', fin: '17:0
 
 export default function NewDevis() {
   const nav = useNavigate()
-  const src = useLocation().state?.from // devis dupliqué (sans dates ni client)
+  const st = useLocation().state
+  const edit = st?.edit // devis non signé à corriger
+  const src = edit || st?.from // sinon : devis dupliqué (sans dates ni client)
   const srcMulti = !!src && (src.lignes || []).length > 1
   const [profil, setProfil] = useState(null)
   const [form, setForm] = useState({
     objet: src?.objet || '', montant: src && !srcMulti ? String(Number(src.montant_ttc)) : '', cgv_langue: src?.cgv_langue || 'fr', tva_mode: src?.tva_mode || 'incluse', tva_pct: src && Number(src.tva_pct) > 0 ? String(Number(src.tva_pct)) : '20', expire_days: 30, participants_max: String(src?.participants_max || 4), prix_mode: 'ttc',
-    client_nom: '', client_email: '', client_tel: '', client_adresse: '',
+    client_nom: edit?.client_nom || '', client_email: edit?.client_email || '', client_tel: edit?.client_tel || '', client_adresse: edit?.client_adresse || '',
   })
   const [detail, setDetail] = useState(!!srcMulti)
   const [lignes, setLignes] = useState(srcMulti
     ? src.lignes.map(l => ({ description: l.description, quantite: String(Number(l.quantite)), prix: String(l.prix_unitaire_ttc != null ? Number(l.prix_unitaire_ttc) : Math.round(Number(l.prix_unitaire_ht) * (1 + Number(src.tva_pct || 0) / 100) * 100) / 100) }))
     : [emptyLigne()])
-  const [dates, setDates] = useState([emptyDate()])
-  const [requis, setRequis] = useState({ nom: true, email: true, tel: true, adresse: false })
+  const [dates, setDates] = useState(edit && Array.isArray(edit.dates) && edit.dates.length
+    ? edit.dates.map(d => ({ date: d.date, mode: d.mode || 'journee', debut: d.debut || '08:00', fin: d.fin || '17:00' }))
+    : [emptyDate()])
+  const [requis, setRequis] = useState(edit && Array.isArray(edit.champs_requis)
+    ? { nom: edit.champs_requis.includes('nom'), email: edit.champs_requis.includes('email'), tel: edit.champs_requis.includes('tel'), adresse: edit.champs_requis.includes('adresse') }
+    : { nom: true, email: true, tel: true, adresse: false })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -67,7 +73,7 @@ export default function NewDevis() {
     setLoading(true)
     try {
       const requisKeys = CHAMPS.filter(c => requis[c.k]).map(c => c.k)
-      const { data } = await api.post('/api/devis', {
+      const payload = {
         objet: form.objet, dates: dates.map(d => d.mode === 'creneau' ? d : { date: d.date, mode: 'journee' }),
         participants_max: parseInt(form.participants_max), prix_mode: ttcMode ? 'ttc' : 'ht',
         tva_mode: form.tva_mode, tva_pct: tva, cgv_langue: form.cgv_langue, expire_days: form.expire_days,
@@ -77,7 +83,8 @@ export default function NewDevis() {
         ...(detail
           ? { lignes: lignes.map(l => ({ description: l.description, quantite: parseFloat(l.quantite), prix: parseFloat(l.prix) })) }
           : { montant: parseFloat(form.montant) }),
-      })
+      }
+      const { data } = edit ? await api.put(`/api/devis/${edit.id}`, payload) : await api.post('/api/devis', payload)
       nav(`/devis/${data.id}`)
     } catch (err) {
       if (err.response?.data?.code === 'PROFIL_INCOMPLET') { nav('/profil?requis=1'); return }
@@ -95,7 +102,7 @@ export default function NewDevis() {
           <Link to="/" className="btn btn-ghost">← Retour</Link>
         </div>
 
-        <h1 style={{ marginBottom: 24 }}>{src ? `Nouveau devis (copie de ${src.numero || "devis"})` : 'Nouveau devis'}</h1>
+        <h1 style={{ marginBottom: 24 }}>{edit ? `Modifier le devis ${edit.numero || ''}` : src ? `Nouveau devis (copie de ${src.numero || "devis"})` : 'Nouveau devis'}</h1>
 
         {profilIncomplet && (
           <div className="error-msg" style={{ marginBottom: 16 }}>
@@ -268,7 +275,7 @@ export default function NewDevis() {
           </div>
 
           <button type="submit" className="btn btn-primary btn-lg" disabled={loading || profilIncomplet}>
-            {loading ? 'Création…' : 'Créer le devis et générer le lien'}
+            {loading ? 'Enregistrement…' : edit ? 'Enregistrer les modifications' : 'Créer le devis et générer le lien'}
           </button>
         </form>
       </div>

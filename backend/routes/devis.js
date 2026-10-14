@@ -13,6 +13,11 @@ router.post('/', verifyJWT, handle(async (req, res) => {
   res.status(201).json(d);
 }));
 
+// PUT /api/devis/:id — corriger un devis non signé (même numéro, même lien)
+router.put('/:id', verifyJWT, handle(async (req, res) => {
+  res.json(await createDevis(req.user.id, req.body || {}, req.params.id));
+}));
+
 // GET /api/devis — liste des devis du pro connecté
 router.get('/', verifyJWT, async (req, res) => {
   try {

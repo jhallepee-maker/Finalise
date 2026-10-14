@@ -75,7 +75,7 @@ function parseLignes(body) {
 }
 
 // ─── Création ────────────────────────────────────────────────
-async function createDevis(proId, body) {
+async function createDevis(proId, body, updateId = null) {
   const { rows: pr } = await db.query('SELECT * FROM pros WHERE id=$1', [proId]);
   const pro = pr[0];
   if (!pro) throw new HttpError(401, 'Compte introuvable');
@@ -139,6 +139,27 @@ async function createDevis(proId, body) {
   const token = crypto.randomBytes(32).toString('hex');
 
   return db.tx(async tx => {
+    if (updateId) {
+      // Correction d'un devis non signé : même numéro, même lien
+      const { rows: ex } = await tx.query('SELECT id, statut, token_unique FROM devis WHERE id=$1 AND pro_id=$2 FOR UPDATE', [updateId, proId]);
+      if (!ex[0]) throw new HttpError(404, 'Devis introuvable');
+      if (ex[0].statut !== 'en_attente') throw new HttpError(409, 'Un devis signé ne peut plus être modifié');
+      const { rows } = await tx.query(
+        `UPDATE devis SET objet=$2, date_prestation=$3, description=$4, client_nom=$5, client_email=$6, client_tel=$7, client_adresse=$8,
+           montant_ht=$9, tva_pct=$10, expire_at=$11, champs_requis=$12::jsonb, dates=$13::jsonb, participants_max=$14,
+           montant_ttc=$15, prix_mode=$16, cgv_langue=$17, tva_mode=$18 WHERE id=$1 RETURNING *`,
+        [updateId, objet || null, date_prestation, description, prefill.nom || null, email || null, prefill.tel || null, prefill.adresse || null,
+         montant_ht, tva_pct, expire_at, JSON.stringify(requis), JSON.stringify(dates), participants_max, montant_ttc, prix_mode, cgv_langue, tva_mode]
+      );
+      await tx.query('DELETE FROM devis_lignes WHERE devis_id=$1', [updateId]);
+      for (let i = 0; i < lignes.length; i++) {
+        await tx.query(
+          `INSERT INTO devis_lignes (devis_id, position, description, quantite, prix_unitaire_ht, prix_unitaire_ttc) VALUES ($1,$2,$3,$4,$5,$6)`,
+          [updateId, i, lignes[i].description, lignes[i].quantite, lignes[i].prix_unitaire_ht, lignes[i].prix_unitaire_ttc]
+        );
+      }
+      return { ...rows[0], lignes, dates, lien_unique: `${process.env.FRONTEND_URL}/p/${ex[0].token_unique}` };
+    }
     const numero = await nextNumero(tx, proId, 'devis');
     const { rows } = await tx.query(
       `INSERT INTO devis (pro_id, token_unique, numero, objet, date_prestation, description,

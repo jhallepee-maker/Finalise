@@ -74,3 +74,15 @@ test('CGV demandée en langue absente refusée', async () => {
   await db.query('UPDATE pros SET cgv_en_version_id=NULL WHERE id=$1', [pro]);
   await assert.rejects(createDevis(pro, { objet: 'x', montant: 10, tva_mode: 'incluse', cgv_langue: 'en', dates: D, participants_max: 2, champs_requis: ['nom'] }), /anglais/i);
 });
+
+test('correction d\'un devis non signé : même lien, refus après signature', async () => {
+  await db.query('UPDATE pros SET cgv_en_version_id=$2 WHERE id=$1', [pro, en]);
+  const d = await createDevis(pro, { objet: 'A', montant: 100, tva_mode: 'non_applicable', dates: D, participants_max: 4, champs_requis: ['nom'] });
+  const u = await createDevis(pro, { objet: 'B', montant: 120, tva_mode: 'non_applicable', dates: [D[0]], participants_max: 3, champs_requis: ['nom'] }, d.id);
+  assert.equal(u.token_unique, d.token_unique);
+  assert.equal(u.numero, d.numero);
+  const pub = await getPublicDevis(d.token_unique);
+  assert.equal(pub.objet, 'B'); assert.equal(Number(pub.montant_ttc), 120); assert.equal(pub.dates.length, 1); assert.equal(pub.lignes.length, 1);
+  await signDevis(d.token_unique, { ...base, dates_confirmees: pub.dates }, '1.1.1.1', 'ua');
+  await assert.rejects(createDevis(pro, { objet: 'C', montant: 1, tva_mode: 'non_applicable', dates: D, participants_max: 2, champs_requis: ['nom'] }, d.id), /signé/i);
+});
