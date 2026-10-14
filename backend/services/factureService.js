@@ -28,7 +28,7 @@ async function issueFacture(devisId) {
       pro: {
         nom: [d.prenom, d.nom].filter(Boolean).join(' '), activite: d.activite, siret: d.siret,
         adresse: [d.adresse, [d.code_postal, d.ville].filter(Boolean).join(' ')].filter(Boolean).join(', '),
-        telephone: d.telephone, email: d.pro_email, tva_franchise: !!d.tva_franchise,
+        telephone: d.telephone, email: d.pro_email, tva_franchise: d.tva_mode ? d.tva_mode === 'non_applicable' : !!d.tva_franchise,
       },
       client: { nom: d.client_nom, email: d.client_email, tel: d.client_tel, adresse: d.client_adresse },
       paye_at: pay[0]?.paye_at || new Date().toISOString(),

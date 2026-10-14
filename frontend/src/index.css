@@ -484,9 +484,17 @@ textarea { resize: vertical; min-height: 100px }
 
 /* ─── À renseigner / prérempli ──────────────────────────── */
 .tag { font-size: 12px; font-weight: 600; border-radius: 99px; padding: 2px 9px; background: var(--bg2); color: var(--fg2) }
-.tag-todo { background: var(--amber-bg); color: var(--amber) }
+.tag-todo { background: var(--red-bg); color: var(--red) }
 .tag-ok { background: var(--green-bg); color: var(--green) }
-.is-todo { border: 2px solid var(--amber) !important; background: var(--amber-bg) !important }
+.is-todo { border: 2px solid var(--red) !important; background: var(--red-bg) !important }
+.req { color: var(--red); font-weight: 700; margin-left: 2px }
+.todo-box { border: 2px solid var(--red); border-radius: 10px; padding: 10px 14px; margin-top: 16px; color: var(--red); font-size: 14px; background: var(--red-bg) }
+.todo-box ul { margin: 6px 0 0 18px; padding: 0 }
+.choice-row { display: flex; gap: 8px; flex-wrap: wrap }
+.choice { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border: 1.5px solid var(--border); border-radius: 10px; cursor: pointer; font-weight: 500; flex: 1 1 150px }
+.choice input { width: auto; accent-color: var(--sapin, #1c5a4d) }
+.choice.on { border-color: var(--green); background: var(--green-bg) }
+.row-todo { outline: 2px solid var(--red); border-radius: 10px; background: var(--red-bg) }
 .block-title { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px }
 .block-title .n { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--accent) }
 

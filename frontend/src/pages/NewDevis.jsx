@@ -6,7 +6,7 @@ const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: '
 
 const EXPIRE_OPTIONS = [7, 14, 30, 60]
 const CHAMPS = [
-  { k: 'nom', label: 'Nom et prénom', field: 'client_nom', type: 'text', ph: 'Jean Martin', locked: true },
+  { k: 'nom', label: 'Nom et prénom', field: 'client_nom', type: 'text', ph: 'Jean Martin' },
   { k: 'email', label: 'Email', field: 'client_email', type: 'email', ph: 'jean@exemple.fr' },
   { k: 'tel', label: 'Téléphone', field: 'client_tel', type: 'tel', ph: '06 12 34 56 78' },
   { k: 'adresse', label: 'Adresse de facturation', field: 'client_adresse', type: 'text', ph: '12 rue des Alpes, 74000 Annecy' },
@@ -18,9 +18,10 @@ export default function NewDevis() {
   const nav = useNavigate()
   const [profil, setProfil] = useState(null)
   const [form, setForm] = useState({
-    objet: '', tva_pct: '20', expire_days: 30, participants_max: '4', prix_mode: 'ttc',
+    objet: '', montant: '', cgv_langue: 'fr', tva_mode: 'incluse', tva_pct: '20', expire_days: 30, participants_max: '4', prix_mode: 'ttc',
     client_nom: '', client_email: '', client_tel: '', client_adresse: '',
   })
+  const [detail, setDetail] = useState(false)
   const [lignes, setLignes] = useState([emptyLigne()])
   const [dates, setDates] = useState([emptyDate()])
   const [requis, setRequis] = useState({ nom: true, email: true, tel: true, adresse: false })
@@ -30,12 +31,17 @@ export default function NewDevis() {
   useEffect(() => {
     api.get('/api/profil').then(({ data }) => {
       setProfil(data)
-      if (data.tva_franchise) setForm(f => ({ ...f, tva_pct: '0' }))
+      setForm(f => ({
+        ...f,
+        tva_mode: data.tva_franchise ? 'non_applicable' : 'incluse',
+        cgv_langue: data.cgv_pdf?.fr || data.cgv_url ? 'fr' : 'en',
+      }))
     }).catch(() => {})
   }, [])
 
-  const franchise = !!profil?.tva_franchise
-  const profilIncomplet = profil && (!profil.adresse || !profil.siret || (!profil.cgv_pdf && !profil.cgv_url))
+  const franchise = form.tva_mode === 'non_applicable'
+  const hasFr = !!(profil?.cgv_pdf?.fr || profil?.cgv_url), hasEn = !!profil?.cgv_pdf?.en
+  const profilIncomplet = profil && (!profil.adresse || !profil.siret || (!hasFr && !hasEn))
 
   const set = k => e => setForm(f => ({ ...f, [k]: e.target.value }))
   const setL = (i, k) => e => setLignes(ls => ls.map((l, j) => (j === i ? { ...l, [k]: e.target.value } : l)))
@@ -43,7 +49,8 @@ export default function NewDevis() {
 
   const ttcMode = franchise || form.prix_mode === 'ttc'
   const tva = franchise ? 0 : parseFloat(form.tva_pct) || 0
-  const somme = lignes.reduce((s, l) => s + (parseFloat(l.quantite) || 0) * (parseFloat(l.prix) || 0), 0)
+  const lignesEff = detail ? lignes : [{ quantite: '1', prix: form.montant }]
+  const somme = lignesEff.reduce((s, l) => s + (parseFloat(l.quantite) || 0) * (parseFloat(l.prix) || 0), 0)
   const ttc = ttcMode ? somme : somme * (1 + tva / 100)
   const ht = ttcMode ? ttc / (1 + tva / 100) : somme
 
@@ -55,16 +62,17 @@ export default function NewDevis() {
     setError('')
     setLoading(true)
     try {
+      const requisKeys = CHAMPS.filter(c => requis[c.k]).map(c => c.k)
       const { data } = await api.post('/api/devis', {
         objet: form.objet, dates: dates.map(d => d.mode === 'creneau' ? d : { date: d.date, mode: 'journee' }),
         participants_max: parseInt(form.participants_max), prix_mode: ttcMode ? 'ttc' : 'ht',
-        tva_pct: tva, expire_days: form.expire_days,
+        tva_mode: form.tva_mode, tva_pct: tva, cgv_langue: form.cgv_langue, expire_days: form.expire_days,
         client_nom: form.client_nom, client_email: form.client_email,
         client_tel: form.client_tel, client_adresse: form.client_adresse,
-        champs_requis: CHAMPS.filter(c => c.locked || requis[c.k]).map(c => c.k),
-        lignes: lignes.map(l => ({
-          description: l.description, quantite: parseFloat(l.quantite), prix: parseFloat(l.prix),
-        })),
+        champs_requis: requisKeys,
+        ...(detail
+          ? { lignes: lignes.map(l => ({ description: l.description, quantite: parseFloat(l.quantite), prix: parseFloat(l.prix) })) }
+          : { montant: parseFloat(form.montant) }),
       })
       nav(`/devis/${data.id}`)
     } catch (err) {
@@ -103,7 +111,7 @@ export default function NewDevis() {
             </div>
             <label style={{ display: 'block', marginBottom: 4 }}>Date de la sortie <span style={{ color: 'var(--amber)' }}>(obligatoire)</span></label>
             <div className="form-hint" style={{ marginBottom: 8 }}>
-              Une seule date : elle est fixée. Plusieurs dates : le client en choisit une en signant. Une prestation de loisirs à date précise n'ouvre pas de droit de rétractation de 14 jours.
+              Toutes les dates ci-dessous font partie de la prestation : le client les confirme une par une en signant.
             </div>
             {dates.map((d, i) => (
               <div key={i} style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 8 }}>
@@ -124,55 +132,82 @@ export default function NewDevis() {
                 )}
               </div>
             ))}
-            <button type="button" className="btn btn-secondary" style={{ marginBottom: 16 }} onClick={() => setDates(ds => [...ds, emptyDate()])}>+ Proposer une autre date</button>
+            <button type="button" className="btn btn-secondary" style={{ marginBottom: 16 }} onClick={() => setDates(ds => [...ds, emptyDate()])}>+ Ajouter une date</button>
 
             <div className="form-group">
               <label>Nombre maximum de participants</label>
               <input type="number" required min="1" max="200" step="1" value={form.participants_max} onChange={set('participants_max')} style={{ maxWidth: 120 }} />
-              <div className="form-hint">Le client indiquera combien ils seront (jusqu'à ce maximum). Le prix reste celui de vos lignes.</div>
+              <div className="form-hint">Le client indiquera combien ils seront (jusqu'à ce maximum). Le prix est global, quel que soit leur nombre.</div>
             </div>
 
-            {!franchise && (
+            <div className="form-group">
+              <label>TVA</label>
+              <div className="choice-row">
+                <label className={`choice ${form.tva_mode === 'incluse' ? 'on' : ''}`}>
+                  <input type="radio" name="tva_mode" checked={form.tva_mode === 'incluse'} onChange={() => setForm(f => ({ ...f, tva_mode: 'incluse' }))} />
+                  <span>TVA comprise</span>
+                </label>
+                <label className={`choice ${form.tva_mode === 'non_applicable' ? 'on' : ''}`}>
+                  <input type="radio" name="tva_mode" checked={form.tva_mode === 'non_applicable'} onChange={() => setForm(f => ({ ...f, tva_mode: 'non_applicable' }))} />
+                  <span>TVA non applicable</span>
+                </label>
+              </div>
+              {!franchise ? (
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+                  <select value={form.tva_pct} onChange={set('tva_pct')} style={{ maxWidth: 110 }} aria-label="Taux de TVA">
+                    <option value="5.5">5,5 %</option>
+                    <option value="10">10 %</option>
+                    <option value="20">20 %</option>
+                  </select>
+                  <div className="form-hint" style={{ margin: 0 }}>Le montant saisi est le prix final TTC.</div>
+                </div>
+              ) : (
+                <div className="form-hint">Le montant saisi est le prix final. Mention « TVA non applicable, art. 293 B du CGI » sur le devis et la facture.</div>
+              )}
+            </div>
+
+            {!detail ? (
               <div className="form-group">
-                <label>Vos prix sont saisis en</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {[['ttc', 'TTC (montant final)'], ['ht', 'HT']].map(([v, t]) => (
-                    <button key={v} type="button" className={`btn ${form.prix_mode === v ? 'btn-primary' : 'btn-secondary'}`}
-                      onClick={() => setForm(f => ({ ...f, prix_mode: v }))}>{t}</button>
+                <label>Montant à payer {franchise ? '(net)' : '(TTC)'}</label>
+                <input type="number" required min="0.01" step="0.01" value={form.montant} onChange={set('montant')} placeholder="450" style={{ maxWidth: 180 }} />
+                <button type="button" className="btn btn-ghost" style={{ marginTop: 6, padding: 0 }} onClick={() => setDetail(true)}>Détailler en plusieurs lignes</button>
+              </div>
+            ) : (
+              <>
+                <label style={{ display: 'block', marginBottom: 8 }}>Lignes du devis</label>
+                {lignes.map((l, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, padding: '10px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
+                    <input type="text" required value={l.description} onChange={setL(i, 'description')} placeholder="Encadrement guide, 6 h" />
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <input type="number" required min="0.01" step="0.01" value={l.quantite} onChange={setL(i, 'quantite')} style={{ width: 80 }} aria-label="Quantité" />
+                      <span>×</span>
+                      <input type="number" required min="0" step="0.01" value={l.prix} onChange={setL(i, 'prix')} placeholder="Prix €" style={{ flex: 1 }} aria-label="Prix unitaire" />
+                      {lignes.length > 1 && (
+                        <button type="button" className="btn btn-ghost" onClick={() => setLignes(ls => ls.filter((_, j) => j !== i))} aria-label="Supprimer la ligne">✕</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setLignes(ls => [...ls, emptyLigne()])}>+ Ajouter une ligne</button>
+                  <button type="button" className="btn btn-ghost" onClick={() => setDetail(false)}>Un seul montant</button>
+                </div>
+              </>
+            )}
+
+            {hasFr && hasEn && (
+              <div className="form-group" style={{ marginTop: 16 }}>
+                <label>Langue des CGV pour ce devis</label>
+                <div className="choice-row">
+                  {[['fr', 'Français'], ['en', 'English']].map(([v, t]) => (
+                    <label key={v} className={`choice ${form.cgv_langue === v ? 'on' : ''}`}>
+                      <input type="radio" name="cgv_langue" checked={form.cgv_langue === v} onChange={() => setForm(f => ({ ...f, cgv_langue: v }))} />
+                      <span>{t}</span>
+                    </label>
                   ))}
                 </div>
               </div>
             )}
-
-            <label style={{ display: 'block', marginBottom: 8 }}>Lignes du devis</label>
-            {lignes.map((l, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8, padding: '10px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
-                <input type="text" required value={l.description} onChange={setL(i, 'description')} placeholder="Encadrement guide, 6 h" />
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input type="number" required min="0.01" step="0.01" value={l.quantite} onChange={setL(i, 'quantite')} style={{ width: 80 }} aria-label="Quantité" />
-                  <span>×</span>
-                  <input type="number" required min="0" step="0.01" value={l.prix} onChange={setL(i, 'prix')} placeholder={franchise ? 'Prix €' : (ttcMode ? 'Prix TTC €' : 'Prix HT €')} style={{ flex: 1 }} aria-label="Prix unitaire" />
-                  {lignes.length > 1 && (
-                    <button type="button" className="btn btn-ghost" onClick={() => setLignes(ls => ls.filter((_, j) => j !== i))} aria-label="Supprimer la ligne">✕</button>
-                  )}
-                </div>
-              </div>
-            ))}
-            <button type="button" className="btn btn-secondary" style={{ marginTop: 8 }} onClick={() => setLignes(ls => [...ls, emptyLigne()])}>+ Ajouter une ligne</button>
-
-            <div className="form-group" style={{ marginTop: 16 }}>
-              <label>{ttcMode ? 'TVA (comprise dans vos prix)' : 'TVA'}</label>
-              {franchise ? (
-                <div className="form-hint">TVA non applicable (art. 293 B du CGI) : le prix que vous saisissez est le montant final. Réglé dans votre profil.</div>
-              ) : (
-                <select value={form.tva_pct} onChange={set('tva_pct')}>
-                  <option value="0">0 % (exonéré)</option>
-                  <option value="5.5">5,5 %</option>
-                  <option value="10">10 %</option>
-                  <option value="20">20 %</option>
-                </select>
-              )}
-            </div>
 
             {somme > 0 && (
               <div style={{ padding: '12px 0', borderTop: '1px solid var(--border)', marginTop: 8 }}>
@@ -195,26 +230,25 @@ export default function NewDevis() {
             <div className="form-hint" style={{ marginBottom: 16 }}>
               Remplissez ce que vous savez. Cochez « Le client doit compléter » pour ce qui manque : il le saisira avant de payer.
             </div>
-            {CHAMPS.map(c => {
-              const vide = !form[c.field].trim()
-              return (
-                <div className="form-group" key={c.k}>
-                  <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <span>{c.label}</span>
-                    {c.locked ? (
-                      <span style={{ fontWeight: 400, fontSize: 12, color: 'var(--fg3)' }}>toujours demandé</span>
-                    ) : (
-                      <span style={{ fontWeight: 400, fontSize: 12 }}>
-                        <input type="checkbox" checked={requis[c.k]} onChange={e => setRequis(r => ({ ...r, [c.k]: e.target.checked }))} style={{ width: 'auto', marginRight: 6 }} />
-                        Le client doit compléter
-                      </span>
-                    )}
-                  </label>
-                  <input type={c.type} value={form[c.field]} onChange={set(c.field)} placeholder={c.ph} />
-                  {(c.locked || requis[c.k]) && vide && <div className="form-hint" style={{ color: 'var(--amber)' }}>Sera demandé au client (à renseigner).</div>}
-                </div>
-              )
-            })}
+            {CHAMPS.map(c => (
+              <div className="form-group" key={c.k}>
+                <label style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                  <span>{c.label}</span>
+                  <span style={{ fontWeight: 400, fontSize: 12 }}>
+                    <input type="checkbox" checked={requis[c.k]} style={{ width: 'auto', marginRight: 6 }}
+                      onChange={e => {
+                        const on = e.target.checked
+                        setRequis(r => ({ ...r, [c.k]: on }))
+                        if (on) setForm(f => ({ ...f, [c.field]: '' }))
+                      }} />
+                    Le client doit compléter
+                  </span>
+                </label>
+                <input type={c.type} value={form[c.field]} disabled={requis[c.k]}
+                  onChange={e => { set(c.field)(e); if (e.target.value && requis[c.k]) setRequis(r => ({ ...r, [c.k]: false })) }}
+                  placeholder={requis[c.k] ? 'Sera saisi par le client' : c.ph} />
+              </div>
+            ))}
           </div>
 
           {/* 3. Validité */}

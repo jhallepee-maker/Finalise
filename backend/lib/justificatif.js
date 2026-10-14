@@ -41,7 +41,7 @@ function renderJustificatifPdf(r) {
     label('Client');
     value([cl.nom, cl.email, cl.tel, cl.adresse].filter(Boolean).join('\n'));
     label(`Prestation signée${snap.numero ? ' — devis ' + snap.numero : ''}`);
-    value([snap.objet, snap.date_prestation && `Date : ${snap.date_prestation}`, snap.participants && `Participants : ${snap.participants}`].filter(Boolean).join('\n') || snap.description || r.description);
+    value([snap.objet, (Array.isArray(snap.dates) && snap.dates.length ? `Date(s) : ${snap.dates.join(' ; ')}` : snap.date_prestation && `Date : ${snap.date_prestation}`), snap.participants && `Participants : ${snap.participants}`].filter(Boolean).join('\n') || snap.description || r.description);
     if (Array.isArray(snap.lignes)) {
       doc.fontSize(10).fillColor('#111');
       const ttc = snap.prix_mode === 'ttc';
@@ -52,12 +52,13 @@ function renderJustificatifPdf(r) {
       doc.moveDown(0.7);
     }
     label('Montants');
-    value(`HT ${fmtEUR(snap.montant_ht ?? r.montant_ht)}  ·  TVA ${snap.tva_pct ?? r.tva_pct} %  ·  TTC ${fmtEUR(snap.montant_ttc ?? r.montant_ttc)}`);
+    value(snap.tva_mode === 'non_applicable' ? `Total net ${fmtEUR(snap.montant_ttc ?? r.montant_ttc)} — TVA non applicable` : `HT ${fmtEUR(snap.montant_ht ?? r.montant_ht)}  ·  TVA ${snap.tva_pct ?? r.tva_pct} %  ·  TTC ${fmtEUR(snap.montant_ttc ?? r.montant_ttc)}`);
     if (snap.cases) {
       label('Cases cochées par le signataire');
       value([
         snap.cases.accept_devis && 'Lu et accepté le devis',
         snap.cases.accept_cgv && `Lu et accepté les CGV (${snap.cgv_nom ? 'PDF « ' + snap.cgv_nom + ' », empreinte SHA-256 ' + snap.cgv_hash : snap.cgv_url})`,
+        snap.cases.accept_rgpd && 'Pris connaissance de la politique de confidentialité (RGPD)',
         snap.cases.accept_signature && 'Signature électronique (art. 1366 du Code civil)',
       ].filter(Boolean).map(t => '☑ ' + t).join('\n').replace(/☑/g, '[x]'));
     }

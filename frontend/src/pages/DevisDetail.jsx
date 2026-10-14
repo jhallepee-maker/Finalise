@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { showTtc, lineTotal } from '../pricing'
+import { buildMessage, waLink, mailLink } from '../share'
 import api from '../api'
 
 const LABELS = {
@@ -21,11 +22,14 @@ export default function DevisDetail() {
   const [error, setError]         = useState('')
   const [deleting, setDeleting]   = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  const [pro, setPro]           = useState(null)
+  const [msg, setMsg]           = useState(null)
 
   useEffect(() => {
     api.get(`/api/devis/${id}`)
       .then(r => setDevis(r.data))
       .catch(() => setError('Devis introuvable.'))
+    api.get('/api/profil').then(r => setPro(r.data)).catch(() => {})
   }, [id])
 
   if (error) return (
@@ -51,21 +55,10 @@ export default function DevisDetail() {
     setTimeout(() => setCopied(false), 2500)
   }
 
-  const mailtoLink = () => {
-    const subject = encodeURIComponent(`Votre devis — ${devis.description.slice(0, 60)}`)
-    const body = encodeURIComponent(
-      `Bonjour${devis.client_nom ? ' ' + devis.client_nom : ''},\n\n` +
-      `Veuillez trouver ci-dessous le lien pour consulter, signer et régler votre devis :\n\n` +
-      `${publicUrl}\n\n` +
-      `Montant TTC : ${fmt(devis.montant_ttc)}\n\n` +
-      `Ce lien vous permet de signer électroniquement et de procéder au paiement sécurisé.\n\n` +
-      `Cordialement`
-    )
-    const to = devis.client_email ? encodeURIComponent(devis.client_email) : ''
-    return `mailto:${to}?subject=${subject}&body=${body}`
-  }
+  const texte = msg ?? buildMessage(devis, pro, publicUrl)
+  const tvaNA = devis.tva_mode ? devis.tva_mode === 'non_applicable' : Number(devis.tva_pct) === 0
 
-  const pv = { prix_mode: devis.prix_mode, tva_franchise: Number(devis.tva_pct) === 0 }
+  const pv = { prix_mode: devis.prix_mode, tva_franchise: tvaNA }
   const isPaid    = devis.statut === 'paye'
   const isSigned  = devis.statut === 'signe' || isPaid
   const isExpire  = devis.statut === 'expire'
@@ -101,35 +94,21 @@ export default function DevisDetail() {
           {devis.expire_at && ` · Expire le ${fmtDate(devis.expire_at)}`}
         </div>
 
-        {/* Lien client */}
+        {/* Envoi au client */}
         {!isExpire && (
           <div className="card" style={{ marginBottom: 16 }}>
-            <h3 style={{ marginBottom: 12 }}>Lien à envoyer au client</h3>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <input
-                id="lien-client"
-                readOnly
-                value={publicUrl}
-                style={{ flex: 1, minWidth: 0, fontSize: 13 }}
-                onFocus={e => e.target.select()}
-              />
-              <button className="btn btn-secondary" onClick={copyLink} style={{ minWidth: 90 }}>
-                {copied ? '✓ Copié !' : 'Copier'}
-              </button>
-              {devis.client_email && (
-                <a
-                  href={mailtoLink()}
-                  className="btn btn-secondary"
-                  style={{ textDecoration: 'none' }}
-                >
-                  ✉ Email
-                </a>
-              )}
+            <h3 style={{ marginBottom: 4 }}>Envoyer au client</h3>
+            <div className="form-hint" style={{ marginBottom: 10 }}>Message prêt à envoyer — modifiez-le si besoin. Le lien affiche un aperçu propre dans WhatsApp et les emails.</div>
+            <textarea value={texte} onChange={e => setMsg(e.target.value)} rows={8} style={{ width: '100%', fontSize: 14, lineHeight: 1.5 }} aria-label="Message" />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+              <a href={waLink(devis.client_tel, texte)} target="_blank" rel="noreferrer" className="btn btn-primary" style={{ textDecoration: 'none' }}>WhatsApp</a>
+              <a href={mailLink(devis, pro, texte)} className="btn btn-secondary" style={{ textDecoration: 'none' }}>Email</a>
+              <button className="btn btn-secondary" onClick={copyLink}>{copied ? '✓ Lien copié' : 'Copier le lien'}</button>
+              {msg !== null && <button className="btn btn-ghost" onClick={() => setMsg(null)}>Réinitialiser</button>}
             </div>
-            {!devis.client_email && (
-              <div className="form-hint" style={{ marginTop: 8 }}>
-                Aucun email client renseigné — partagez le lien manuellement.
-              </div>
+            <input id="lien-client" readOnly value={publicUrl} style={{ marginTop: 10, fontSize: 12 }} onFocus={e => e.target.select()} aria-label="Lien" />
+            {!devis.client_tel && !devis.client_email && (
+              <div className="form-hint" style={{ marginTop: 8 }}>Le client n'a pas de téléphone ni d'email renseigné : WhatsApp et Email s'ouvriront sans destinataire, vous le choisirez à l'envoi.</div>
             )}
           </div>
         )}
@@ -221,7 +200,7 @@ export default function DevisDetail() {
                 {devis.participants_nb ? `${devis.participants_nb} participant${devis.participants_nb > 1 ? 's' : ''}` : 'Participants : à indiquer par le client'} · maximum {devis.participants_max}
               </div>
             )}
-            {(devis.lignes || []).map((l, i) => (
+            {(devis.lignes || []).length > 1 && devis.lignes.map((l, i) => (
               <div className="line-item" key={i}>
                 <span className="line-item-label">{l.description}{Number(l.quantite) !== 1 ? ` × ${Number(l.quantite)}` : ''}</span>
                 <span className="line-item-value">{fmt(lineTotal(l, pv))}</span>

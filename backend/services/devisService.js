@@ -81,25 +81,34 @@ async function createDevis(proId, body) {
   if (!pro) throw new HttpError(401, 'Compte introuvable');
   if (!pro.adresse || !pro.siret)
     throw new HttpError(422, 'Complétez votre profil (adresse et SIRET) avant de créer un devis.', { code: 'PROFIL_INCOMPLET' });
-  if (!pro.cgv_version_id && !pro.cgv_url)
+  if (!pro.cgv_version_id && !pro.cgv_en_version_id && !pro.cgv_url)
     throw new HttpError(422, 'Ajoutez vos conditions générales de vente (PDF) dans votre profil avant de créer un devis.', { code: 'PROFIL_INCOMPLET' });
 
-
   const dates = parseDates(body);
-  const date_prestation = dates.length === 1
-    ? labelDate(dates[0]).slice(0, 120)
-    : ('Au choix : ' + dates.map(labelDate).join(' ou ')).slice(0, 500);
+  const date_prestation = dates.map(labelDate).join(' ; ').slice(0, 500);
   const participants_max = Math.floor(Number(body.participants_max));
   if (!(participants_max >= 1) || participants_max > 200)
     throw new HttpError(400, 'Indiquez le nombre maximum de participants (1 à 200)');
 
-  // Franchise en base de TVA : toujours 0 %
-  const tvaIn = Number(body.tva_pct ?? 20);
-  const tva_pct = pro.tva_franchise ? 0 : (TVA_VALUES.includes(tvaIn) ? tvaIn : 20);
+  // CGV : langue choisie sur le devis (français par défaut)
+  const hasFr = !!(pro.cgv_version_id || pro.cgv_url), hasEn = !!pro.cgv_en_version_id;
+  const cgv_langue = body.cgv_langue === 'en' ? 'en' : (body.cgv_langue === 'fr' ? 'fr' : (hasFr ? 'fr' : 'en'));
+  if ((cgv_langue === 'fr' && !hasFr) || (cgv_langue === 'en' && !hasEn))
+    throw new HttpError(400, `Vous n'avez pas de CGV en ${cgv_langue === 'en' ? 'anglais' : 'français'} : ajoutez-les dans votre profil.`);
 
-  // Prix saisis en TTC (montant final) ou en HT. Le total payé est exactement le montant final annoncé.
-  const prix_mode = body.prix_mode === 'ht' && !pro.tva_franchise ? 'ht' : 'ttc';
-  const saisies = parseLignes(body);
+  // TVA : choisie sur chaque devis. « Non applicable » = prix net, taux 0.
+  const tva_mode = body.tva_mode === 'non_applicable' ? 'non_applicable' : (body.tva_mode === 'incluse' ? 'incluse' : (pro.tva_franchise ? 'non_applicable' : 'incluse'));
+  const tvaIn = Number(body.tva_pct ?? 20);
+  const tva_pct = tva_mode === 'non_applicable' ? 0 : (TVA_VALUES.includes(tvaIn) && tvaIn > 0 ? tvaIn : 20);
+
+  // Prix saisis en TTC (montant final) — HT possible via l'API. Le total payé est exactement le montant annoncé.
+  const prix_mode = tva_mode === 'incluse' && body.prix_mode === 'ht' ? 'ht' : 'ttc';
+  const objet = str(body.objet, 255);
+  // Un seul montant suffit : une ligne portant l'intitulé. Des lignes détaillées restent possibles.
+  const bodyLignes = Array.isArray(body.lignes) && body.lignes.length
+    ? body
+    : (body.montant != null ? { ...body, lignes: [{ description: objet || 'Prestation', quantite: 1, prix: body.montant }] } : body);
+  const saisies = parseLignes(bodyLignes);
   const f = 1 + tva_pct / 100;
   let montant_ht, montant_ttc;
   if (prix_mode === 'ttc') {
@@ -114,15 +123,16 @@ async function createDevis(proId, body) {
     ? { description: l.description, quantite: l.quantite, prix_unitaire_ttc: l.prix, prix_unitaire_ht: Math.round(l.prix / f * 10000) / 10000 }
     : { description: l.description, quantite: l.quantite, prix_unitaire_ht: l.prix, prix_unitaire_ttc: r2(l.prix * f) });
 
-  const requis = Array.isArray(body.champs_requis)
-    ? body.champs_requis.filter(k => CHAMPS[k])
-    : DEFAULT_REQUIS;
-  if (!requis.includes('nom')) requis.unshift('nom'); // le signataire doit toujours être identifié
+  // Champs à compléter par le client : le pro ne les remplit pas (valeur ignorée)
+  const requis = Array.isArray(body.champs_requis) ? [...new Set(body.champs_requis.filter(k => CHAMPS[k]))] : DEFAULT_REQUIS;
+  const prefill = {};
+  for (const k of Object.keys(CHAMPS)) prefill[k] = requis.includes(k) ? '' : str(body[CHAMPS[k]], k === 'adresse' ? 500 : 255);
+  if (!requis.includes('nom') && !prefill.nom)
+    throw new HttpError(400, 'Indiquez le nom du client, ou cochez « Le client doit compléter ».');
 
-  const email = str(body.client_email);
+  const email = prefill.email;
   if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'Email du client invalide');
 
-  const objet = str(body.objet, 255);
   const description = objet || lignes.map(l => l.description).join(' · ').slice(0, 500);
   const expireDays = Math.min(Math.max(parseInt(body.expire_days) || 30, 1), 90);
   const expire_at = new Date(Date.now() + expireDays * 86400000);
@@ -133,11 +143,11 @@ async function createDevis(proId, body) {
     const { rows } = await tx.query(
       `INSERT INTO devis (pro_id, token_unique, numero, objet, date_prestation, description,
          client_nom, client_email, client_tel, client_adresse, montant_ht, tva_pct, expire_at, champs_requis,
-         dates, participants_max, montant_ttc, prix_mode)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18) RETURNING *`,
+         dates, participants_max, montant_ttc, prix_mode, cgv_langue, tva_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,$16,$17,$18,$19,$20) RETURNING *`,
       [proId, token, numero, objet || null, date_prestation, description,
-       str(body.client_nom) || null, email || null, str(body.client_tel, 30) || null, str(body.client_adresse, 500) || null,
-       montant_ht, tva_pct, expire_at, JSON.stringify(requis), JSON.stringify(dates), participants_max, montant_ttc, prix_mode]
+       prefill.nom || null, email || null, prefill.tel || null, prefill.adresse || null,
+       montant_ht, tva_pct, expire_at, JSON.stringify(requis), JSON.stringify(dates), participants_max, montant_ttc, prix_mode, cgv_langue, tva_mode]
     );
     const devis = rows[0];
     for (let i = 0; i < lignes.length; i++) {
@@ -161,7 +171,7 @@ async function getLignes(devisId) {
 // Vue publique pour le client (lien unique). Retourne null si introuvable.
 async function getPublicDevis(token) {
   const { rows } = await db.query(
-    `SELECT d.*, p.nom AS pro_nom, p.prenom AS pro_prenom, p.activite, p.cgv_url, p.cgv_version_id AS pro_cgv_version, p.tva_franchise
+    `SELECT d.*, p.nom AS pro_nom, p.prenom AS pro_prenom, p.activite, p.cgv_url, p.cgv_version_id AS pro_cgv_fr, p.cgv_en_version_id AS pro_cgv_en, p.tva_franchise AS pro_franchise
        FROM devis d JOIN pros p ON d.pro_id = p.id WHERE d.token_unique=$1`, [token]
   );
   const d = rows[0];
@@ -175,15 +185,16 @@ async function getPublicDevis(token) {
     id: d.id, token_unique: d.token_unique, numero: d.numero, objet: d.objet || null,
     description: d.description, date_prestation: d.date_prestation, lignes,
     montant_ht: d.montant_ht, tva_pct: d.tva_pct, montant_ttc: d.montant_ttc, prix_mode: d.prix_mode || 'ht',
-    tva_franchise: !!d.tva_franchise,
+    tva_franchise: d.tva_mode ? d.tva_mode === 'non_applicable' : !!d.pro_franchise,
     statut: d.statut, expire_at: d.expire_at,
     pro_nom: [d.pro_prenom, d.pro_nom].filter(Boolean).join(' '), activite: d.activite,
-    cgv_url: d.cgv_url || null,
-    cgv_pdf: !!(d.cgv_version_id || d.pro_cgv_version),
-    has_cgv: !!(d.cgv_url || d.cgv_version_id || d.pro_cgv_version),
+    cgv_langue: d.cgv_langue || 'fr',
+    cgv_url: (d.cgv_langue || 'fr') === 'fr' ? (d.cgv_url || null) : null,
+    cgv_pdf: !!(d.cgv_version_id || ((d.cgv_langue || 'fr') === 'en' ? d.pro_cgv_en : d.pro_cgv_fr)),
+    has_cgv: !!(d.cgv_version_id || ((d.cgv_langue || 'fr') === 'en' ? d.pro_cgv_en : (d.pro_cgv_fr || d.cgv_url))),
     dates: (Array.isArray(d.dates) ? d.dates : []).map(o => ({ ...o, label: labelDate(o) })),
     participants_max: d.participants_max || 1,
-    date_choisie: d.date_choisie || null, participants_nb: d.participants_nb || null,
+    participants_nb: d.participants_nb || null,
     champs_requis: Array.isArray(d.champs_requis) ? d.champs_requis : DEFAULT_REQUIS,
     client: { nom: d.client_nom || '', email: d.client_email || '', tel: d.client_tel || '', adresse: d.client_adresse || '' },
   };
@@ -194,7 +205,7 @@ async function getPublicDevis(token) {
 async function signDevis(token, body, ip, ua) {
   return db.tx(async tx => {
     const { rows } = await tx.query(
-      `SELECT d.*, p.cgv_url, p.cgv_version_id AS pro_cgv_version FROM devis d JOIN pros p ON d.pro_id=p.id WHERE d.token_unique=$1 FOR UPDATE OF d`, [token]
+      `SELECT d.*, p.cgv_url, p.cgv_version_id AS pro_cgv_fr, p.cgv_en_version_id AS pro_cgv_en FROM devis d JOIN pros p ON d.pro_id=p.id WHERE d.token_unique=$1 FOR UPDATE OF d`, [token]
     );
     const d = rows[0];
     if (!d) throw new HttpError(404, 'Devis introuvable');
@@ -216,33 +227,34 @@ async function signDevis(token, body, ip, ua) {
 
     // Cases à cocher
     const c = body.cases || {};
-    const cases = { accept_devis: c.accept_devis === true, accept_cgv: c.accept_cgv === true, accept_signature: c.accept_signature === true };
+    const cases = { accept_devis: c.accept_devis === true, accept_cgv: c.accept_cgv === true, accept_rgpd: c.accept_rgpd === true, accept_signature: c.accept_signature === true };
     const casesManquantes = [];
     if (!cases.accept_devis) casesManquantes.push('accept_devis');
     let cgv = null; // version PDF des CGV proposée au moment de la signature
-    if (d.pro_cgv_version) {
-      const { rows: cv } = await tx.query('SELECT id, nom, hash FROM cgv_versions WHERE id=$1', [d.pro_cgv_version]);
+    const cgvId = (d.cgv_langue || 'fr') === 'en' ? d.pro_cgv_en : d.pro_cgv_fr;
+    if (cgvId) {
+      const { rows: cv } = await tx.query('SELECT id, nom, hash FROM cgv_versions WHERE id=$1', [cgvId]);
       cgv = cv[0] || null;
     }
-    if ((d.cgv_url || cgv) && !cases.accept_cgv) casesManquantes.push('accept_cgv');
+    const cgvLien = (d.cgv_langue || 'fr') === 'fr' ? d.cgv_url : null;
+    if ((cgvLien || cgv) && !cases.accept_cgv) casesManquantes.push('accept_cgv');
+    if (!cases.accept_rgpd) casesManquantes.push('accept_rgpd');
     if (!cases.accept_signature) casesManquantes.push('accept_signature');
     if (casesManquantes.length)
       throw new HttpError(400, 'Veuillez cocher toutes les cases obligatoires', { cases_manquantes: casesManquantes });
 
-    // Date (si plusieurs options) et nombre de participants
+    // Toutes les dates du devis doivent être cochées (dates convenues, pas de choix) ; nombre de participants
     const options = Array.isArray(d.dates) ? d.dates : [];
-    let choisie = null;
-    if (options.length === 1) choisie = options[0];
-    else if (options.length > 1) {
-      const c = body.date_choisie || {};
-      choisie = options.find(o => o.date === c.date && o.mode === c.mode && (o.debut || '') === (c.debut || '') && (o.fin || '') === (c.fin || ''));
-      if (!choisie) throw new HttpError(400, 'Choisissez la date de votre sortie', { champs_manquants: ['date'] });
-    }
+    const cochees = Array.isArray(body.dates_confirmees) ? body.dates_confirmees : [];
+    const key = o => `${o.date}|${o.mode}|${o.debut || ''}|${o.fin || ''}`;
+    const setCochees = new Set(cochees.map(key));
+    if (options.some(o => !setCochees.has(key(o))))
+      throw new HttpError(400, 'Cochez toutes les dates de la prestation', { champs_manquants: ['dates'] });
     const max = d.participants_max || 1;
     const nb = max === 1 ? 1 : Math.floor(Number(body.participants_nb));
     if (!(nb >= 1) || nb > max)
       throw new HttpError(400, `Indiquez le nombre de participants (1 à ${max})`, { champs_manquants: ['participants'] });
-    const datePrestation = choisie ? labelDate(choisie) : d.date_prestation;
+    const datePrestation = d.date_prestation;
 
     const { rows: lr } = await tx.query(
       `SELECT description, quantite, prix_unitaire_ht, prix_unitaire_ttc FROM devis_lignes WHERE devis_id=$1 ORDER BY position`, [d.id]
@@ -253,19 +265,19 @@ async function signDevis(token, body, ip, ua) {
     // Ce que le client a vu et signé — l'ordre des clés est fixe (hash stable)
     const snapshot = {
       devis_id: d.id, numero: d.numero, pro_id: d.pro_id,
-      objet: d.objet, date_prestation: datePrestation, participants: nb, participants_max: max, description: d.description, lignes,
-      prix_mode: d.prix_mode || 'ht',
+      objet: d.objet, date_prestation: datePrestation, dates: options.map(labelDate), participants: nb, participants_max: max, description: d.description, lignes,
+      prix_mode: d.prix_mode || 'ht', tva_mode: d.tva_mode || null,
       montant_ht: String(d.montant_ht), tva_pct: String(d.tva_pct), montant_ttc: String(d.montant_ttc),
       client: { nom: client.nom, email: client.email, tel: client.tel, adresse: client.adresse },
-      cgv_url: d.cgv_url || null, cgv_nom: cgv ? cgv.nom : null, cgv_hash: cgv ? cgv.hash : null, cases,
+      cgv_langue: d.cgv_langue || 'fr', cgv_url: cgvLien || null, cgv_nom: cgv ? cgv.nom : null, cgv_hash: cgv ? cgv.hash : null, cases,
     };
     const hash = crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
 
     await tx.query(
       `UPDATE devis SET statut='signe', client_nom=$2, client_email=$3, client_tel=$4, client_adresse=$5,
-         date_prestation=$6, date_choisie=$7::jsonb, participants_nb=$8, cgv_version_id=$9 WHERE id=$1`,
+         date_prestation=$6, participants_nb=$7, cgv_version_id=$8 WHERE id=$1`,
       [d.id, client.nom, client.email || null, client.tel || null, client.adresse || null,
-       datePrestation, choisie ? JSON.stringify(choisie) : null, nb, cgv ? cgv.id : null]
+       datePrestation, nb, cgv ? cgv.id : null]
     );
     const nom_signe = str(body.nom_signe) || client.nom;
     const { rows: sg } = await tx.query(

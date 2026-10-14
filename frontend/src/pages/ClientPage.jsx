@@ -54,7 +54,7 @@ function PaymentForm({ devis, onSuccess }) {
         disabled={!stripe || loading}
       >
         {loading ? 'Paiement en cours…' : (
-          <span>Commande avec obligation de paiement<br /><span style={{ fontWeight: 500, fontSize: 13 }}>{fmt(devis.montant_ttc)} TTC</span></span>
+          <span>Commande avec obligation de paiement<br /><span style={{ fontWeight: 500, fontSize: 13 }}>{fmt(devis.montant_ttc)}{devis.tva_franchise ? '' : ' TTC'}</span></span>
         )}
       </button>
       <div className="legal-notice" style={{ textAlign: 'center', marginTop: 12 }}>
@@ -105,10 +105,9 @@ export default function ClientPage() {
 
   // Informations client + cases à cocher
   const [client, setClient] = useState({ nom: '', email: '', tel: '', adresse: '' })
-  const [cases, setCases]   = useState({ accept_devis: false, accept_cgv: false, accept_signature: false })
-  const [dateIdx, setDateIdx] = useState(null)
+  const [cases, setCases]   = useState({ accept_devis: false, accept_cgv: false, accept_rgpd: false, accept_signature: false })
+  const [datesOk, setDatesOk] = useState({})
   const [nbPart, setNbPart] = useState('')
-  const [missing, setMissing] = useState({ champs: [], cases: [] })
   const API = import.meta.env.VITE_API_URL || ''
   const [prefilled, setPrefilled] = useState({})
   const [signLoading, setSignLoading] = useState(false)
@@ -160,44 +159,36 @@ export default function ClientPage() {
     }
   }
 
-  // Efface le message d'erreur dès que tout ce qui manquait est complété
-  useEffect(() => {
-    if (!signError) return
-    const reste = missing.champs.some(k => (k === 'date' ? dateIdx === null : k === 'participants' ? !nbPart : !client[k]?.trim()))
-      || missing.cases.some(k => !cases[k])
-    if (!reste) setSignError('')
-  }, [client, cases, dateIdx, nbPart])
+  // Ce qu'il reste à compléter (calculé en direct) : le bouton reste désactivé tant que la liste n'est pas vide
+  const reste = []
+  if (devis && step === 'view') {
+    const requis = [...new Set(['nom', ...(devis.champs_requis || [])])]
+    for (const c of CHAMPS_CLIENT) if (requis.includes(c.k) && !client[c.k].trim()) reste.push({ id: c.k, t: c.label })
+    devis.dates.forEach((d, i) => { if (!datesOk[i]) reste.push({ id: `d${i}`, t: `Date à confirmer : ${d.label}` }) })
+    if (devis.participants_max > 1 && !nbPart) reste.push({ id: 'participants', t: 'Nombre de participants' })
+    if (!cases.accept_devis) reste.push({ id: 'accept_devis', t: 'Accepter le devis' })
+    if (devis.has_cgv && !cases.accept_cgv) reste.push({ id: 'accept_cgv', t: 'Accepter les CGV' })
+    if (!cases.accept_rgpd) reste.push({ id: 'accept_rgpd', t: 'Confidentialité des données' })
+    if (!cases.accept_signature) reste.push({ id: 'accept_signature', t: 'Signature électronique' })
+  }
+  const isTodo = id => reste.some(r => r.id === id)
+  const suffixe = devis && !devis.tva_franchise ? ' TTC' : ''
 
   const sign = async e => {
     e.preventDefault()
     setSignError('')
-    const champs = [...new Set(['nom', ...(devis.champs_requis || [])])].filter(k => !client[k].trim())
-    const multi = devis.dates.length > 1
-    if (multi && dateIdx === null) champs.push('date')
-    if (devis.participants_max > 1 && !nbPart) champs.push('participants')
-    const manque = []
-    if (!cases.accept_devis) manque.push('accept_devis')
-    if (devis.has_cgv && !cases.accept_cgv) manque.push('accept_cgv')
-    if (!cases.accept_signature) manque.push('accept_signature')
-    setMissing({ champs, cases: manque })
-    if (champs.length || manque.length) {
-      setSignError('Complétez les champs en orange et cochez les cases obligatoires.')
-      return
-    }
+    if (reste.length) return
     setSignLoading(true)
     try {
-      const dc = devis.dates.length === 1 ? devis.dates[0] : devis.dates[dateIdx]
       await api.post('/api/paiement/signer', {
         token, client, cases, nom_signe: client.nom,
-        date_choisie: dc ? { date: dc.date, mode: dc.mode, debut: dc.debut, fin: dc.fin } : undefined,
+        dates_confirmees: devis.dates.map(({ date, mode, debut, fin }) => ({ date, mode, debut, fin })),
         participants_nb: devis.participants_max > 1 ? parseInt(nbPart) : 1,
       })
       setDevis(d => ({ ...d, statut: 'signe' }))
       await initPayment(devis)
     } catch (err) {
-      const x = err.response?.data || {}
-      setMissing({ champs: x.champs_manquants || [], cases: x.cases_manquantes || [] })
-      setSignError(x.error || 'Erreur lors de la signature')
+      setSignError(err.response?.data?.error || 'Erreur lors de la signature')
       setSignLoading(false)
     }
   }
@@ -256,10 +247,10 @@ export default function ClientPage() {
         <div className="client-logo">Finalise</div>
         <div className="hero-pro">Devis de {devis.pro_nom}{devis.activite ? `, ${devis.activite}` : ''}</div>
         <h1>{devis.objet || 'Votre prestation'}</h1>
-        <div className="hero-when">{(devis.dates.length === 1 ? devis.dates[0].label : (dateIdx !== null ? devis.dates[dateIdx].label : null)) || (devis.dates.length > 1 ? `${devis.dates.length} dates proposées, à choisir plus bas` : devis.date_prestation)}</div>
+        <div className="hero-when">{devis.dates.length ? (devis.dates.length <= 2 ? devis.dates.map(d => d.label).join(' · ') : `${devis.dates.length} dates`) : devis.date_prestation}</div>
         <div className="hero-price">
           <strong>{fmt(devis.montant_ttc)}</strong>
-          <span>{devis.tva_franchise ? 'net, TVA non applicable' : 'TTC'}</span>
+          <span>{devis.tva_franchise ? '' : 'TTC'}</span>
         </div>
       </header>
 
@@ -268,13 +259,13 @@ export default function ClientPage() {
       {/* Récap devis */}
       <div className="card devis-card">
         {devis.numero && <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 6 }}>Devis {devis.numero}</div>}
-        {devis.lignes.map((l, i) => (
+        {devis.lignes.length > 1 && devis.lignes.map((l, i) => (
           <div className="line-item" key={i}>
             <span className="line-item-label">{l.description}{Number(l.quantite) !== 1 ? ` × ${Number(l.quantite)}` : ''}</span>
             <span className="line-item-value">{fmt(lineTotal(l, devis))}</span>
           </div>
         ))}
-        <div style={{ borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 }}>
+        <div style={devis.lignes.length > 1 ? { borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 } : undefined}>
           {devis.tva_franchise ? (
             <>
               <div className="line-item line-item-total">
@@ -305,82 +296,68 @@ export default function ClientPage() {
       {step === 'view' && (
         <form onSubmit={sign}>
           {signError && <div className="error-msg" style={{ marginBottom: 16 }}>{signError}</div>}
-
-          {(devis.dates.length > 1 || devis.participants_max > 1) && (
-            <div className="signature-block">
-              <h3>1. Votre sortie</h3>
-              {devis.dates.length > 1 && (
-                <div className="form-group">
-                  <label style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Choisissez votre date</span>
-                    {dateIdx === null && <span className="tag tag-todo">À renseigner</span>}
-                  </label>
-                  <div className={dateIdx === null ? 'is-todo' : undefined} style={{ borderRadius: 10, padding: 8 }}>
-                    {devis.dates.map((d, i) => (
-                      <label key={i} className="checkbox-row">
-                        <input type="radio" name="date" checked={dateIdx === i} onChange={() => setDateIdx(i)} />
-                        <span>{d.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {devis.participants_max > 1 && (
-                <div className="form-group">
-                  <label htmlFor="f-nb" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>Nombre de participants (maximum {devis.participants_max})</span>
-                    {!nbPart && <span className="tag tag-todo">À renseigner</span>}
-                  </label>
-                  <select id="f-nb" value={nbPart} onChange={e => setNbPart(e.target.value)}
-                    className={!nbPart ? 'is-todo' : undefined}>
-                    <option value="">Choisir…</option>
-                    {Array.from({ length: devis.participants_max }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
-                  </select>
-                </div>
-              )}
-            </div>
-          )}
+          <p className="form-hint" style={{ marginBottom: 12 }}><span className="req">*</span> champ obligatoire</p>
 
           <div className="signature-block">
-            <h3>{(devis.dates.length > 1 || devis.participants_max > 1) ? '2' : '1'}. Vos informations</h3>
-            <div className="form-hint" style={{ marginBottom: 14 }}>Vérifiez les champs préremplis. Complétez ceux marqués « À renseigner ».</div>
+            <h3>1. Votre sortie</h3>
+            <div className="form-group">
+              <label>Dates de la prestation — confirmez chacune <span className="req">*</span></label>
+              {devis.dates.map((d, i) => (
+                <label key={i} className={`checkbox-row ${isTodo(`d${i}`) ? 'row-todo' : ''}`}>
+                  <input type="checkbox" checked={!!datesOk[i]} onChange={e => setDatesOk(o => ({ ...o, [i]: e.target.checked }))} />
+                  <span>{d.label}</span>
+                </label>
+              ))}
+            </div>
+            {devis.participants_max > 1 && (
+              <div className="form-group">
+                <label htmlFor="f-nb">Nombre de participants (maximum {devis.participants_max}) <span className="req">*</span></label>
+                <select id="f-nb" value={nbPart} onChange={e => setNbPart(e.target.value)} className={isTodo('participants') ? 'is-todo' : undefined}>
+                  <option value="">Choisir…</option>
+                  {Array.from({ length: devis.participants_max }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="signature-block">
+            <h3>2. Vos informations</h3>
             {CHAMPS_CLIENT.map(c => {
               const requis = c.k === 'nom' || (devis.champs_requis || []).includes(c.k)
-              const todo = requis && !client[c.k].trim()
-              const err = missing.champs.includes(c.k) && !client[c.k].trim()
-              const badge = !requis ? 'facultatif' : todo ? 'À renseigner' : (prefilled[c.k] ? 'prérempli' : 'complété')
               return (
                 <div className="form-group" key={c.k}>
-                  <label htmlFor={`f-${c.k}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span>{c.label}</span>
-                    <span className={`tag ${todo ? 'tag-todo' : requis ? 'tag-ok' : ''}`}>{badge}</span>
-                  </label>
+                  <label htmlFor={`f-${c.k}`}>{c.label}{requis ? <span className="req"> *</span> : <span className="form-hint"> (facultatif)</span>}</label>
                   <input id={`f-${c.k}`} type={c.type} value={client[c.k]} placeholder={c.ph}
                     onChange={e => setClient(v => ({ ...v, [c.k]: e.target.value }))}
-                    className={todo || err ? 'is-todo' : undefined} />
+                    className={isTodo(c.k) ? 'is-todo' : undefined} />
                 </div>
               )
             })}
           </div>
 
           <div className="signature-block">
-            <h3>{(devis.dates.length > 1 || devis.participants_max > 1) ? '3' : '2'}. À cocher pour continuer</h3>
-            <div className="form-hint" style={{ marginBottom: 14 }}>Ces cases sont obligatoires.</div>
+            <h3>3. À cocher pour continuer</h3>
             {[
-              ['accept_devis', <>J'ai lu le devis ci-dessus et je l'accepte pour <strong>{fmt(devis.montant_ttc)} TTC</strong>.</>],
-              ...(devis.has_cgv ? [['accept_cgv', <>J'ai lu et j'accepte les <a href={devis.cgv_pdf ? `${API}/api/paiement/cgv/${token}` : devis.cgv_url} target="_blank" rel="noreferrer">conditions générales de vente</a> de {devis.pro_nom}.</>]] : []),
+              ['accept_devis', <>J'ai lu le devis ci-dessus et je l'accepte pour <strong>{fmt(devis.montant_ttc)}{suffixe}</strong>.</>],
+              ...(devis.has_cgv ? [['accept_cgv', <>J'ai lu et j'accepte les <a href={devis.cgv_pdf ? `${API}/api/paiement/cgv/${token}` : devis.cgv_url} target="_blank" rel="noreferrer">conditions générales de vente</a> de {devis.pro_nom}{devis.cgv_langue === 'en' ? ' (English)' : ''}.</>]] : []),
+              ['accept_rgpd', <>J'ai pris connaissance de la <a href="/confidentialite" target="_blank" rel="noreferrer">politique de confidentialité</a> : mes données sont utilisées par {devis.pro_nom} pour exécuter cette prestation.</>],
               ['accept_signature', <>Je signe ce devis électroniquement (art. 1366 du Code civil). Mon adresse IP et l'heure sont enregistrées comme preuve.</>],
             ].map(([k, text]) => (
-              <label key={k} className="checkbox-row"
-                style={missing.cases.includes(k) && !cases[k] ? { outline: '2px solid var(--amber)', borderRadius: 10 } : undefined}>
+              <label key={k} className={`checkbox-row ${isTodo(k) ? 'row-todo' : ''}`}>
                 <input type="checkbox" checked={cases[k]} onChange={e => setCases(c => ({ ...c, [k]: e.target.checked }))} />
-                <span>{text}</span>
+                <span>{text} <span className="req">*</span></span>
               </label>
             ))}
             <div className="legal-notice">
-              Prestation de loisirs à date précise{dateIdx !== null ? ` (${devis.dates[dateIdx].label})` : devis.dates.length === 1 ? ` (${devis.dates[0].label})` : ''} : le droit de rétractation de 14 jours ne s'applique pas. Le paiement de {fmt(devis.montant_ttc)} est exigé en totalité à la commande.
+              Prestation de loisirs à date précise : le droit de rétractation de 14 jours ne s'applique pas. Le paiement de {fmt(devis.montant_ttc)} est exigé en totalité à la commande.
             </div>
-            <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 16 }} disabled={signLoading}>
+            {reste.length > 0 && (
+              <div className="todo-box" role="alert">
+                À compléter pour continuer :
+                <ul>{reste.map(r => <li key={r.id}>{r.t}</li>)}</ul>
+              </div>
+            )}
+            <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 16 }} disabled={signLoading || reste.length > 0}>
               {signLoading ? 'Enregistrement…' : 'Signer et passer au paiement'}
             </button>
           </div>

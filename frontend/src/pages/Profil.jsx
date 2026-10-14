@@ -22,23 +22,23 @@ export default function Profil() {
 
   const set = k => e => { setSaved(false); setP(v => ({ ...v, [k]: e.target.value })) }
   const manque = k => params.get('requis') && (k === 'adresse' || k === 'siret') && !p[k]
-  const cgvOk = !!(p.cgv_pdf || p.cgv_url)
+  const cgvOk = !!(p.cgv_pdf?.fr || p.cgv_pdf?.en || p.cgv_url)
 
-  const uploadCgv = async e => {
+  const uploadCgv = langue => async e => {
     const f = e.target.files?.[0]
     e.target.value = ''
     if (!f) return
     setError('')
     if (f.type !== 'application/pdf') { setError('Le fichier doit être un PDF'); return }
     if (f.size > 5 * 1024 * 1024) { setError('PDF trop lourd (5 Mo maximum)'); return }
-    setCgvBusy(true)
+    setCgvBusy(langue)
     try {
-      const { data } = await api.put(`/api/profil/cgv?nom=${encodeURIComponent(f.name)}`, f, { headers: { 'Content-Type': 'application/pdf' } })
+      const { data } = await api.put(`/api/profil/cgv?langue=${langue}&nom=${encodeURIComponent(f.name)}`, f, { headers: { 'Content-Type': 'application/pdf' } })
       setP(v => ({ ...v, cgv_pdf: data }))
     } catch (err) { setError(err.response?.data?.error || "Échec de l'envoi du PDF") } finally { setCgvBusy(false) }
   }
-  const removeCgv = async () => {
-    try { await api.delete('/api/profil/cgv'); setP(v => ({ ...v, cgv_pdf: null })) } catch { setError('Suppression impossible') }
+  const removeCgv = langue => async () => {
+    try { const { data } = await api.delete(`/api/profil/cgv?langue=${langue}`); setP(v => ({ ...v, cgv_pdf: data })) } catch { setError('Suppression impossible') }
   }
 
   const submit = async e => {
@@ -46,7 +46,7 @@ export default function Profil() {
     try {
       const { data } = await api.put('/api/profil', p)
       setP(v => ({ ...data, cgv_pdf: v.cgv_pdf })); setSaved(true)
-      if (params.get('requis') && data.adresse && data.siret && (data.cgv_pdf || data.cgv_url)) nav('/devis/new')
+      if (params.get('requis') && data.adresse && data.siret && (p.cgv_pdf?.fr || p.cgv_pdf?.en || data.cgv_url)) nav('/devis/new')
     } catch (err) { setError(err.response?.data?.error || 'Erreur') } finally { setLoading(false) }
   }
 
@@ -71,7 +71,7 @@ export default function Profil() {
           ))}
           <label className="checkbox-row">
             <input type="checkbox" checked={!!p.tva_franchise} onChange={e => { setSaved(false); setP(v => ({ ...v, tva_franchise: e.target.checked })) }} />
-            <span>TVA non applicable (franchise en base, art. 293 B du CGI)</span>
+            <span>TVA non applicable par défaut sur mes devis (franchise en base, art. 293 B du CGI) — modifiable devis par devis</span>
           </label>
         </div>
         <div className="card" style={{ marginBottom: 24, ...(params.get('requis') && !cgvOk ? { border: '2px solid var(--amber)' } : {}) }}>
@@ -79,18 +79,26 @@ export default function Profil() {
           <div className="form-hint" style={{ marginBottom: 12 }}>
             Le client devra cocher « J'accepte les CGV » avant de payer. Vos conditions de remboursement figurent dans vos CGV. La version acceptée est conservée avec la signature.
           </div>
-          {p.cgv_pdf ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-              <span style={{ color: 'var(--green)' }}>✓</span>
-              <strong style={{ fontSize: 14, wordBreak: 'break-all' }}>{p.cgv_pdf.nom}</strong>
-              <span className="form-hint">({Math.round(p.cgv_pdf.taille / 1024)} Ko, envoyé le {new Date(p.cgv_pdf.created_at).toLocaleDateString('fr-FR')})</span>
-              <button type="button" className="btn btn-ghost" onClick={removeCgv}>Retirer</button>
-            </div>
-          ) : null}
-          <label className="btn btn-secondary" style={{ display: 'inline-block', cursor: 'pointer' }}>
-            {cgvBusy ? 'Envoi…' : p.cgv_pdf ? 'Remplacer le PDF' : 'Envoyer mes CGV (PDF, 5 Mo max)'}
-            <input type="file" accept="application/pdf" onChange={uploadCgv} disabled={cgvBusy} style={{ display: 'none' }} />
-          </label>
+          {[['fr', 'Version française'], ['en', 'English version (optionnel)']].map(([l, titre]) => {
+            const c = p.cgv_pdf?.[l]
+            return (
+              <div key={l} style={{ padding: '12px 0', borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>{titre}</div>
+                {c && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <span style={{ color: 'var(--green)' }}>✓</span>
+                    <strong style={{ fontSize: 14, wordBreak: 'break-all' }}>{c.nom}</strong>
+                    <span className="form-hint">({Math.round(c.taille / 1024)} Ko, envoyé le {new Date(c.created_at).toLocaleDateString('fr-FR')})</span>
+                    <button type="button" className="btn btn-ghost" onClick={removeCgv(l)}>Retirer</button>
+                  </div>
+                )}
+                <label className="btn btn-secondary" style={{ display: 'inline-block', cursor: 'pointer' }}>
+                  {cgvBusy === l ? 'Envoi…' : c ? 'Remplacer le PDF' : 'Envoyer le PDF (5 Mo max)'}
+                  <input type="file" accept="application/pdf" onChange={uploadCgv(l)} disabled={!!cgvBusy} style={{ display: 'none' }} />
+                </label>
+              </div>
+            )
+          })}
           <div className="form-group" style={{ marginTop: 16, marginBottom: 0 }}>
             <label>Ou, à défaut, un lien vers vos CGV (https://…)</label>
             <input type="url" value={p.cgv_url || ''} onChange={set('cgv_url')} placeholder="https://monsite.fr/cgv" />
