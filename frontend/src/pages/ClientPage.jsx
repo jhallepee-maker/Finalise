@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { loadStripe } from '@stripe/stripe-js'
 import { Elements, PaymentElement, useStripe, useElements } from '@stripe/react-stripe-js'
 import api from '../api'
+import { calEvents, icsHref } from '../calendar'
 import { showTtc, unitPrice, lineTotal } from '../pricing'
 
 const fmt = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
@@ -70,6 +71,25 @@ const CHAMPS_CLIENT = [
   { k: 'tel', label: 'Téléphone', type: 'tel', ph: '06 12 34 56 78' },
   { k: 'adresse', label: 'Adresse de facturation', type: 'text', ph: '12 rue des Alpes, 74000 Annecy' },
 ]
+
+
+function Agenda({ devis, nom }) {
+  const ev = calEvents(devis, nom)
+  if (!ev.length) return null
+  return (
+    <div style={{ marginTop: 20 }}>
+      <div style={{ fontSize: 13, color: 'var(--fg2)', marginBottom: 8 }}>Ajouter à votre agenda</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <a className="btn btn-secondary" style={{ textDecoration: 'none' }} href={icsHref(devis, nom)} download={`${devis.numero || 'devis'}.ics`}>Apple / Outlook (.ics)</a>
+        {ev.map((e, i) => (
+          <a key={i} className="btn btn-secondary" style={{ textDecoration: 'none' }} href={e.google} target="_blank" rel="noreferrer">
+            Google Agenda{ev.length > 1 ? ` · ${new Date(e.date + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''}
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 // ─── Progress steps ──────────────────────────────────────
 function Steps({ current }) {
@@ -214,6 +234,7 @@ export default function ClientPage() {
         </div>
       )}
       <p>Merci — votre paiement a bien été reçu. Une confirmation vous sera transmise par le prestataire.</p>
+      {devis && <Agenda devis={devis} nom={devis.pro_nom} />}
       <p style={{ marginTop: 16 }}>
         <a href={`${import.meta.env.VITE_API_URL || ''}/api/paiement/facture/${token}`}
            target="_blank" rel="noreferrer" style={{ fontSize: 14 }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { showTtc, lineTotal } from '../pricing'
+import { calEvents, icsHref } from '../calendar'
 import { buildMessage, waLink, mailLink } from '../share'
 import api from '../api'
 
@@ -196,6 +197,12 @@ export default function DevisDetail() {
               {devis.numero && <div style={{ fontSize: 12, color: 'var(--fg3)', fontFamily: 'monospace' }}>{devis.numero}</div>}
             </div>
             {devis.date_prestation && <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 4 }}>{devis.date_prestation}</div>}
+            {calEvents(devis).length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+                <a className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 13 }} href={icsHref(devis)} download={`${devis.numero || 'devis'}.ics`}>＋ Agenda (.ics)</a>
+                {calEvents(devis).map((e, i) => <a key={i} className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 13 }} href={e.google} target="_blank" rel="noreferrer">Google Agenda</a>)}
+              </div>
+            )}
             {devis.participants_max > 0 && (
               <div style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 2 }}>
                 {devis.participants_nb ? `${devis.participants_nb} participant${devis.participants_nb > 1 ? 's' : ''}` : 'Participants : à indiquer par le client'} · maximum {devis.participants_max}
