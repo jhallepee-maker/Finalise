@@ -597,3 +597,6 @@ textarea { resize: vertical; min-height: 100px }
 .done-section .btn { width: 100% }
 .done-card .line-item:has(.done-dates) { flex-direction: column; align-items: flex-start; gap: 6px }
 .done-card .done-dates { align-items: flex-start; text-align: left }
+
+/* Les boutons héritent de la police de l'app (sinon Arial par défaut) */
+button, input, select, textarea { font-family: inherit }
