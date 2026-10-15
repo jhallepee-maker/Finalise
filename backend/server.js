@@ -33,6 +33,9 @@ app.use('/api/auth',     limiter(15 * 60 * 1000, 30));
 app.use('/api/paiement', limiter(60 * 1000, 40));
 app.use('/api/stripe/create-payment-intent', limiter(60 * 1000, 20));
 app.use('/api/devis/token', limiter(60 * 1000, 60));
+app.use('/api/assurance', limiter(60 * 1000, 30));
+app.use('/api/push', limiter(60 * 1000, 30));
+app.use('/api/org', limiter(60 * 1000, 60));
 
 // Routes
 app.use('/api/auth',    require('./routes/auth'));

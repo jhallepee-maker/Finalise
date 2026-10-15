@@ -80,6 +80,17 @@ export default function Dashboard() {
     }
   }
 
+  const profilOk = !!(pro && pro.adresse && pro.siret && pro.code_postal && pro.ville)
+  const cgvOk = !!(pro && (pro.cgv_pdf?.fr || pro.cgv_url))
+  const checklist = pro ? [
+    { id: 'profil', ok: profilOk, titre: 'Votre profil', aide: 'Adresse et SIRET : obligatoires sur chaque devis.', fait: 'Adresse et SIRET renseignés.', cta: 'Compléter', to: '/profil?requis=1' },
+    { id: 'cgv', ok: cgvOk, titre: 'Vos conditions de vente', aide: 'Envoyez vos CGV en PDF : le client les accepte en signant.', fait: 'CGV enregistrées.', cta: 'Envoyer', to: '/profil?requis=1' },
+    { id: 'stripe', ok: !!user?.charges_enabled, titre: 'Les paiements', aide: user?.stripe_account_id ? "Votre compte Stripe n'est pas encore actif : vos clients ne peuvent pas payer." : 'Connectez Stripe pour recevoir l\'argent directement sur votre compte.', fait: 'Stripe connecté.', cta: user?.stripe_account_id ? 'Reprendre' : 'Connecter Stripe', onClick: connectStripe, busy: stripeLoading },
+    ...(push === 'off' || push === 'on' ? [{ id: 'push', ok: push === 'on', titre: 'Les notifications', aide: 'Soyez prévenu à la seconde où un client signe ou paie.', fait: 'Activées sur cet appareil.', cta: 'Activer', onClick: togglePush }] : []),
+    ...(push === 'ios-install' ? [{ id: 'push', ok: false, titre: 'Les notifications', aide: "Sur iPhone : Safari, Partager, « Sur l'écran d'accueil », puis ouvrez Finalise depuis son icône.", cta: '', to: undefined, onClick: undefined }] : []),
+  ] : []
+
+
   // Calcul des stats
   const totalEncaisse = devis
     .filter(d => d.statut === 'paye')
@@ -104,44 +115,31 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {push === 'off' && (
-          <div className="todo-box" style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
-            <span>🔔 Soyez prévenu à la seconde où un client signe ou paie.</span>
-            <button className="btn btn-primary" onClick={togglePush}>Activer les notifications</button>
-            {pushErr && <span className="error-msg" style={{ width: '100%' }}>{pushErr}</span>}
-          </div>
-        )}
-        {push === 'ios-install' && (
-          <div className="todo-box" style={{ marginBottom: 16 }}>
-            🔔 Pour recevoir les notifications sur iPhone : dans Safari, touchez <strong>Partager</strong> puis <strong>Sur l'écran d'accueil</strong>, et ouvrez Finalise depuis son icône.
-          </div>
-        )}
         {actAs && (
-          <div className="todo-box" style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <div className="info-box">
             <span>Vous gérez les devis de <strong>{actAs.nom}</strong>.</span>
             <button className="btn btn-secondary" onClick={() => { try { localStorage.removeItem('actAs') } catch {} window.location.reload() }}>Revenir à mon compte</button>
           </div>
         )}
 
-        {/* Bandeau Stripe Connect */}
-        {!actAs && !user?.charges_enabled && !stripeMsg && (
-          <div className="stripe-banner">
-            <div>
-              <strong>{user?.stripe_account_id ? 'Terminez votre inscription Stripe' : 'Activez les paiements'}</strong>
-              <span style={{ fontSize: 13, color: 'var(--fg2)', marginLeft: 8 }}>
-                {user?.stripe_account_id
-                  ? "Votre compte n'est pas encore actif : vos clients ne peuvent pas encore payer."
-                  : 'Connectez votre compte Stripe pour recevoir les paiements de vos clients.'}
-              </span>
-            </div>
-            <button
-              className="btn btn-primary"
-              onClick={connectStripe}
-              disabled={stripeLoading}
-            >
-              {stripeLoading ? 'Redirection…' : user?.stripe_account_id ? 'Reprendre' : 'Connecter Stripe'}
-            </button>
-          </div>
+        {/* Démarrage : ce qu'il reste à faire avant le premier devis */}
+        {!actAs && checklist.some(c => !c.ok) && (
+          <section className="start-card" aria-label="Pour démarrer">
+            <h2>Avant votre premier devis</h2>
+            <p className="start-sub">{checklist.filter(c => c.ok).length} sur {checklist.length} étapes terminées</p>
+            <ul className="start-list">
+              {checklist.map(c => (
+                <li key={c.id} className={c.ok ? 'done' : undefined}>
+                  <span className="start-mark" aria-hidden="true">{c.ok ? '✓' : ''}</span>
+                  <div className="start-text"><strong>{c.titre}</strong><span>{c.ok ? c.fait : c.aide}</span></div>
+                  {!c.ok && (c.to
+                    ? <Link to={c.to} className="btn btn-secondary">{c.cta}</Link>
+                    : <button className="btn btn-primary" onClick={c.onClick} disabled={c.busy}>{c.busy ? 'Un instant…' : c.cta}</button>)}
+                </li>
+              ))}
+            </ul>
+            {pushErr && <div className="error-msg">{pushErr}</div>}
+          </section>
         )}
         {stripeMsg && (
           <div className={`stripe-msg ${stripeMsg.startsWith('✓') ? 'stripe-msg-ok' : 'stripe-msg-warn'}`}>
