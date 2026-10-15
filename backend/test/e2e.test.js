@@ -231,3 +231,20 @@ test('devis avec beaucoup de dates (résumé long) créé sans erreur', async ()
     await db.query('DELETE FROM pros WHERE id=$1', [id]).catch(() => {});
   }
 });
+
+test('suppression de compte : mot de passe exigé, jeton invalidé, e-mail libéré, devis signés conservés', async () => {
+  const e = `del${Date.now()}@test.fr`;
+  const r = await api('POST', '/api/auth/register', { email: e, password: 'motdepasse1', nom: 'Del', accept_cgu: true });
+  const id = r.body.pro.id, jwt = r.body.token;
+  try {
+    const mauvais = await fetch(base + '/api/profil', { method: 'DELETE', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + jwt }, body: JSON.stringify({ password: 'faux' }) });
+    assert.equal(mauvais.status, 403);
+    const ok = await fetch(base + '/api/profil', { method: 'DELETE', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + jwt }, body: JSON.stringify({ password: 'motdepasse1' }) });
+    assert.equal(ok.status, 200);
+    assert.equal((await api('GET', '/api/profil', null, jwt)).status, 401);
+    assert.equal((await api('POST', '/api/auth/login', { email: e, password: 'motdepasse1' })).status, 401);
+    assert.equal((await api('POST', '/api/auth/register', { email: e, password: 'motdepasse1', nom: 'Del2', accept_cgu: true })).status, 201);
+  } finally {
+    await db.query('DELETE FROM pros WHERE id=$1 OR lower(email)=$2', [id, e]).catch(() => {});
+  }
+});

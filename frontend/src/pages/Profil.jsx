@@ -18,6 +18,7 @@ export default function Profil() {
   const [saved, setSaved] = useState(false)
   const [loading, setLoading] = useState(false)
   const [cgvBusy, setCgvBusy] = useState(false)
+  const [suppr, setSuppr] = useState(null) // null | { password, error, busy }
 
   useEffect(() => { api.get('/api/profil').then(({ data }) => setP(data)).catch(() => setError('Chargement impossible')) }, [])
   if (!p) return <div className="loading"><div className="spinner" /></div>
@@ -25,6 +26,15 @@ export default function Profil() {
   const set = k => e => { setSaved(false); setP(v => ({ ...v, [k]: e.target.value })) }
   const manque = k => params.get('requis') && (k === 'adresse' || k === 'siret') && !p[k]
   const cgvOk = !!(p.cgv_pdf?.fr || p.cgv_pdf?.en || p.cgv_url)
+
+  const supprimer = async e => {
+    e.preventDefault()
+    setSuppr(v => ({ ...v, busy: true, error: '' }))
+    try {
+      await api.delete('/api/profil', { data: { password: suppr.password } })
+      logout()
+    } catch (err) { setSuppr(v => ({ ...v, busy: false, error: err.response?.data?.error || 'Suppression impossible' })) }
+  }
 
   const uploadCgv = langue => async e => {
     const f = e.target.files?.[0]
@@ -117,6 +127,28 @@ export default function Profil() {
         <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>{loading ? 'Enregistrement…' : 'Enregistrer'}</button>
       </form>
       <button className="btn btn-ghost" style={{ marginTop: 24 }} onClick={logout}>Se déconnecter</button>
+
+      <div className="card" style={{ marginTop: 32 }}>
+        <h3 style={{ marginTop: 0 }}>Supprimer mon compte</h3>
+        {!suppr ? (
+          <>
+            <p className="form-hint">Votre accès, votre e-mail, votre téléphone et vos notifications sont effacés définitivement. Les devis en attente sont clôturés. Les devis signés et les factures sont conservés 10 ans (obligation légale), avec votre identité de facturation.</p>
+            <button type="button" className="btn btn-ghost" onClick={() => setSuppr({ password: '', error: '', busy: false })}>Supprimer mon compte…</button>
+          </>
+        ) : (
+          <form onSubmit={supprimer}>
+            <div className="form-group">
+              <label>Confirmez avec votre mot de passe</label>
+              <input type="password" autoComplete="current-password" value={suppr.password} onChange={e => setSuppr(v => ({ ...v, password: e.target.value }))} required />
+            </div>
+            {suppr.error && <div className="error-msg">{suppr.error}</div>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" className="btn btn-primary" style={{ background: '#b42318' }} disabled={suppr.busy || !suppr.password}>{suppr.busy ? 'Suppression…' : 'Supprimer définitivement'}</button>
+              <button type="button" className="btn btn-ghost" onClick={() => setSuppr(null)}>Annuler</button>
+            </div>
+          </form>
+        )}
+      </div>
     </div></div>
   )
 }

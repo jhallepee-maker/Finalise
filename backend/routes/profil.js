@@ -1,5 +1,6 @@
 const express = require('express');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 const { verifyJWT } = require('../middleware/auth');
 const { HttpError, handle } = require('../lib/httpError');
@@ -67,6 +68,31 @@ router.put('/', verifyJWT, handle(async (req, res) => {
      str(b.ville, 120) || null, b.tva_franchise === true, cgv || null, str(b.mediateur, 400) || null]
   );
   res.json({ ...rows[0], cgv_pdf: await cgvInfo(req.user.id) });
+}));
+
+// DELETE /api/profil — suppression du compte (droit à l'effacement, exigé aussi par Apple/Google).
+// Mot de passe exigé. Les devis signés/payés et les factures sont conservés (obligation légale, 10 ans)
+// avec l'identité de facturation du professionnel ; tout le reste (accès, e-mail, téléphone, notifications) est effacé.
+router.delete('/', verifyJWT, handle(async (req, res) => {
+  const { rows } = await db.query('SELECT password_hash FROM pros WHERE id=$1 AND deleted_at IS NULL', [req.user.id]);
+  if (!rows.length) throw new HttpError(404, 'Compte introuvable');
+  if (!(await bcrypt.compare(String((req.body || {}).password || ''), rows[0].password_hash)))
+    throw new HttpError(403, 'Mot de passe incorrect');
+  const { rows: org } = await db.query('SELECT org_id, org_role FROM pros WHERE id=$1', [req.user.id]);
+  if (org[0].org_id && org[0].org_role === 'admin') {
+    const { rows: autres } = await db.query('SELECT 1 FROM pros WHERE org_id=$1 AND id<>$2 AND deleted_at IS NULL LIMIT 1', [org[0].org_id, req.user.id]);
+    if (autres.length) throw new HttpError(409, "Vous administrez un bureau avec d'autres membres : désignez un autre administrateur ou retirez-les avant de supprimer votre compte");
+  }
+  await db.tx(async tx => {
+    await tx.query(`UPDATE devis SET statut='expire' WHERE pro_id=$1 AND statut='en_attente'`, [req.user.id]);
+    await tx.query('DELETE FROM push_subscriptions WHERE pro_id=$1', [req.user.id]);
+    await tx.query('DELETE FROM org_invitations WHERE lower(email)=(SELECT lower(email) FROM pros WHERE id=$1)', [req.user.id]);
+    await tx.query(
+      `UPDATE pros SET email=$2, password_hash=$3, telephone=NULL, org_id=NULL, org_role=NULL, deleted_at=NOW() WHERE id=$1`,
+      [req.user.id, `supprime-${req.user.id}@compte-supprime.invalid`, crypto.randomBytes(32).toString('hex')]
+    );
+  });
+  res.json({ ok: true });
 }));
 
 module.exports = router;
