@@ -86,3 +86,10 @@ test('parcours complet jusqu’à la facture, avec assurance', async () => {
   }
   assert.equal((await api('GET', '/api/devis/' + cr.body.id, null, jwt)).status, 200);
 });
+
+test('santé et robustesse', async () => {
+  assert.equal((await api('GET', '/health')).status, 200);
+  assert.equal((await api('GET', '/health/db')).body.db, 'ok');
+  const bad = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{pas du json' });
+  assert.equal(bad.status, 400);
+});

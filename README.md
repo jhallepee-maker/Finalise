@@ -32,3 +32,8 @@ npm run dev
 Variables Railway : `MEETCH_ENABLED=1`, `MEETCH_API_KEY` (Bearer), `MEETCH_BASE_URL` (sans /v1, pré-prod : `https://api.preprod.ticketing.meetch.io`), `MEETCH_PRODUCT_ID`, `MEETCH_WEBHOOK_SECRET` (= `signing_key` donnée à la création du webhook Meetch ; signature `Webhook-Signature` vérifiée), `MEETCH_RATE` (4,5 % par défaut) et `MEETCH_MIN` (2 €).
 Webhook à déclarer chez Meetch : `POST https://finalise-production.up.railway.app/api/assurance/webhook/meetch` (événements claim.opened / claim.refused / claim.refunded).
 La prime n'est pas fournie par l'API Meetch : elle se calcule côté Finalise avec les tranches du contrat. Sans clé complète : mode mock.
+
+## Sauvegardes et surveillance
+- `scripts/backup.sh` : dump chiffré (AES-256) de la base, 30 sauvegardes conservées, restauration documentée en tête du script. À lancer régulièrement depuis un poste de confiance, jamais depuis un dépôt public (les dumps contiennent des données clients).
+- `GET /health` (léger, utilisé par Railway) et `GET /health/db` (vérifie PostgreSQL) : brancher `/health/db` sur un moniteur d'uptime gratuit (UptimeRobot, Better Stack).
+- Les erreurs serveur sont journalisées en une ligne JSON (méthode, chemin, message), sans corps de requête ni données personnelles.

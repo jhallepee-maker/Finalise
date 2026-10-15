@@ -4,6 +4,7 @@ const cors         = require('cors');
 const helmet       = require('helmet');
 const rateLimit    = require('express-rate-limit');
 const runMigrations = require('./db/migrate');
+const db           = require('./db');
 const app          = express();
 
 // Appliquer les migrations au démarrage
@@ -42,6 +43,22 @@ app.use('/api/stripe',  require('./routes/stripe'));
 app.use('/api/assurance', require('./routes/assurance'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
+
+// Surveillance : /health reste léger (Railway) ; /health/db vérifie la base (à brancher sur un moniteur d'uptime)
+app.get('/health/db', async (req, res) => {
+  try { await db.query('SELECT 1'); res.json({ status: 'ok', db: 'ok' }); }
+  catch (e) { console.error(JSON.stringify({ level: 'error', where: 'health/db', msg: e.message })); res.status(503).json({ status: 'down', db: 'down' }); }
+});
+
+// Erreurs non rattrapées par les routes : JSON invalide → 400, le reste → 500 journalisé (une ligne JSON, sans corps de requête)
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  if (err.type === 'entity.parse.failed') return res.status(400).json({ error: 'JSON invalide' });
+  if (err.type === 'entity.too.large') return res.status(413).json({ error: 'Requête trop volumineuse' });
+  console.error(JSON.stringify({ level: 'error', method: req.method, path: req.path, msg: err.message, stack: String(err.stack || '').split('\n').slice(0, 4).join(' | ') }));
+  res.status(500).json({ error: 'Erreur serveur' });
+});
+process.on('unhandledRejection', r => console.error(JSON.stringify({ level: 'error', where: 'unhandledRejection', msg: String(r && r.message || r) })));
 
 module.exports = app; // importable par les tests
 
