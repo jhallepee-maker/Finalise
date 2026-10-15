@@ -209,3 +209,19 @@ test('push : abonnement, envoi, nettoyage des appareils expirés', async () => {
     await db.query('DELETE FROM pros WHERE id=$1', [id]).catch(() => {});
   }
 });
+
+test('devis avec beaucoup de dates (résumé long) créé sans erreur', async () => {
+  const e = `dates${Date.now()}@test.fr`;
+  const r = await api('POST', '/api/auth/register', { email: e, password: 'motdepasse1', nom: 'Da', accept_cgu: true });
+  const id = r.body.pro.id, jwt = r.body.token;
+  try {
+    await db.query(`UPDATE pros SET siret='12345678901234', adresse='1 rue', code_postal='74000', ville='Annecy' WHERE id=$1`, [id]);
+    await fetch(base + '/api/profil/cgv?langue=fr&nom=c.pdf', { method: 'PUT', headers: { 'content-type': 'application/pdf', authorization: 'Bearer ' + jwt }, body: Buffer.from('%PDF-1.4 ' + 'x'.repeat(300)) });
+    const dates = Array.from({ length: 8 }, (_, i) => ({ date: `2031-07-${String(10 + i).padStart(2, '0')}`, mode: 'creneau', debut: '04:00', fin: '15:00' }));
+    const c = await api('POST', '/api/devis', { objet: 'Traversée longue', montant: 900, dates, participants_max: 4 }, jwt);
+    assert.equal(c.status, 201, JSON.stringify(c.body));
+  } finally {
+    await db.query('DELETE FROM devis WHERE pro_id=$1', [id]).catch(() => {});
+    await db.query('DELETE FROM pros WHERE id=$1', [id]).catch(() => {});
+  }
+});
