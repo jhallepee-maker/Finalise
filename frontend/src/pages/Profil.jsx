@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../api'
+import { useAuth } from '../AuthContext'
 
 const F = [
   ['prenom', 'Prénom', 'text'], ['nom', 'Nom', 'text'], ['activite', 'Activité', 'text'],
@@ -9,6 +10,7 @@ const F = [
 ]
 
 export default function Profil() {
+  const { logout } = useAuth()
   const nav = useNavigate()
   const [params] = useSearchParams()
   const [p, setP] = useState(null)
@@ -107,6 +109,7 @@ export default function Profil() {
         </div>
         <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>{loading ? 'Enregistrement…' : 'Enregistrer'}</button>
       </form>
+      <button className="btn btn-ghost" style={{ marginTop: 24 }} onClick={logout}>Se déconnecter</button>
     </div></div>
   )
 }

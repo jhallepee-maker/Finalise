@@ -94,13 +94,13 @@ export default function Dashboard() {
         <div className="topbar">
           <span className="logo">Finalise</span>
           <div className="topbar-actions">
-            <span style={{ fontSize: 13, color: 'var(--fg2)' }}>
+            <span className="hide-sm" style={{ fontSize: 13, color: 'var(--fg2)' }}>
               {user?.prenom || user?.nom}
             </span>
             {push === 'on' && <button className="btn btn-ghost" title="Désactiver les notifications" onClick={togglePush}>🔔</button>}
             <Link to="/equipe" className="btn btn-ghost">Bureau</Link>
-            <Link to="/profil" className="btn btn-ghost">Mon profil</Link>
-            <button className="btn btn-ghost" onClick={logout}>Déconnexion</button>
+            <Link to="/profil" className="btn btn-ghost">Profil</Link>
+            <button className="btn btn-ghost hide-sm" onClick={logout}>Déconnexion</button>
           </div>
         </div>
 
@@ -153,17 +153,17 @@ export default function Dashboard() {
         {!loading && devis.length > 0 && (
           <div style={{ display: 'flex', gap: 10, marginBottom: 24, flexWrap: 'wrap' }}>
             <StatTile
-              label="Total encaissé"
+              label="Encaissé"
               value={fmt(totalEncaisse)}
               accent={totalEncaisse > 0 ? 'var(--green)' : undefined}
             />
             <StatTile
-              label="En attente"
+              label="À signer"
               value={enAttente}
-              sub={enAttente === 1 ? 'devis à signer' : 'devis à signer'}
+              sub={enAttente === 1 ? 'devis' : 'devis'}
             />
             <StatTile
-              label="Signés"
+              label="À encaisser"
               value={signes}
               sub={signes === 1 ? 'paiement attendu' : 'paiements attendus'}
               accent={signes > 0 ? 'var(--amber)' : undefined}

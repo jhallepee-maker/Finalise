@@ -133,6 +133,7 @@ export default function ClientPage() {
   const API = import.meta.env.VITE_API_URL || ''
   const [prefilled, setPrefilled] = useState({})
   const [signLoading, setSignLoading] = useState(false)
+  const [tried, setTried] = useState(false)
   const [signError, setSignError] = useState('')
 
   useEffect(() => {
@@ -185,18 +186,19 @@ export default function ClientPage() {
     }
   }
 
-  // Ce qu'il reste à compléter (calculé en direct) : le bouton reste désactivé tant que la liste n'est pas vide
-  const reste = []
+  // Éléments requis (état en direct) : le bouton ne valide pas tant que tout n'est pas fait
+  const items = []
   if (devis && step === 'view') {
     const requis = [...new Set(['nom', ...(devis.champs_requis || [])])]
-    for (const c of CHAMPS_CLIENT) if (requis.includes(c.k) && !client[c.k].trim()) reste.push({ id: c.k, t: c.label })
-    devis.dates.forEach((d, i) => { if (!datesOk[i]) reste.push({ id: `d${i}`, t: `Date à confirmer : ${d.label}` }) })
-    if (devis.participants_max > 1 && !nbPart) reste.push({ id: 'participants', t: 'Nombre de participants' })
-    if (!cases.accept_devis) reste.push({ id: 'accept_devis', t: 'Accepter le devis' })
-    if (devis.has_cgv && !cases.accept_cgv) reste.push({ id: 'accept_cgv', t: 'Accepter les CGV' })
-    if (!cases.accept_rgpd) reste.push({ id: 'accept_rgpd', t: 'Confidentialité des données' })
-    if (!cases.accept_signature) reste.push({ id: 'accept_signature', t: 'Signature électronique' })
+    for (const c of CHAMPS_CLIENT) if (requis.includes(c.k)) items.push({ id: c.k, t: c.label, ok: !!client[c.k].trim() })
+    devis.dates.forEach((d, i) => items.push({ id: `d${i}`, t: `Date à confirmer : ${d.label}`, ok: !!datesOk[i] }))
+    if (devis.participants_max > 1) items.push({ id: 'participants', t: 'Nombre de participants', ok: !!nbPart })
+    items.push({ id: 'accept_devis', t: 'Accepter le devis', ok: !!cases.accept_devis })
+    if (devis.has_cgv) items.push({ id: 'accept_cgv', t: 'Accepter les CGV', ok: !!cases.accept_cgv })
+    items.push({ id: 'accept_rgpd', t: 'Confidentialité des données', ok: !!cases.accept_rgpd })
+    items.push({ id: 'accept_signature', t: 'Signature électronique', ok: !!cases.accept_signature })
   }
+  const reste = items.filter(i => !i.ok)
   const isTodo = id => reste.some(r => r.id === id)
   const suffixe = devis && !devis.tva_franchise ? ' TTC' : ''
 
@@ -305,10 +307,12 @@ export default function ClientPage() {
         <div style={devis.lignes.length > 1 ? { borderTop: '1px solid var(--border)', marginTop: 8, paddingTop: 8 } : undefined}>
           {devis.tva_franchise ? (
             <>
-              <div className="line-item line-item-total">
-                <span className="line-item-label">Total à payer</span>
-                <span className="line-item-value">{fmt(devis.montant_ttc)}</span>
-              </div>
+              {devis.lignes.length > 1 && (
+                <div className="line-item line-item-total">
+                  <span className="line-item-label">Total à payer</span>
+                  <span className="line-item-value">{fmt(devis.montant_ttc)}</span>
+                </div>
+              )}
               <div className="form-hint">TVA non applicable, art. 293 B du CGI.</div>
             </>
           ) : showTtc(devis) ? (
@@ -331,7 +335,7 @@ export default function ClientPage() {
 
       {/* Étape : informations + cases + signature */}
       {step === 'view' && (
-        <form onSubmit={sign}>
+        <form onSubmit={sign} className={tried ? 'show-errors' : undefined}>
           {signError && <div className="error-msg" style={{ marginBottom: 16 }}>{signError}</div>}
           <p className="form-hint" style={{ marginBottom: 12 }}><span className="req">*</span> champ obligatoire</p>
 
@@ -388,13 +392,23 @@ export default function ClientPage() {
             <div className="legal-notice">
               Prestation de loisirs à date précise : le droit de rétractation de 14 jours ne s'applique pas. Le paiement de {fmt(devis.montant_ttc)} est exigé en totalité à la commande.
             </div>
-            {reste.length > 0 && (
-              <div className="todo-box" role="alert">
-                À compléter pour continuer :
-                <ul>{reste.map(r => <li key={r.id}>{r.t}</li>)}</ul>
+            {reste.length > 0 ? (
+              <div className="progress-box" role={tried ? 'alert' : 'status'}>
+                <div className="progress-head"><strong>{items.length - reste.length} sur {items.length}</strong> éléments complétés</div>
+                <div className="progress-bar"><span style={{ width: `${Math.round(((items.length - reste.length) / items.length) * 100)}%` }} /></div>
+                {tried && <ul>{reste.map(r => <li key={r.id}>{r.t}</li>)}</ul>}
               </div>
+            ) : (
+              <div className="progress-box ready" role="status">Tout est prêt : vous pouvez signer.</div>
             )}
-            <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 16 }} disabled={signLoading || reste.length > 0}>
+            <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 16 }} disabled={signLoading}
+              aria-disabled={reste.length > 0}
+              data-pending={reste.length > 0 ? 'true' : undefined}
+              onClick={e => {
+                if (!reste.length) return
+                e.preventDefault(); setTried(true)
+                requestAnimationFrame(() => document.querySelector('.show-errors .is-todo, .show-errors .row-todo')?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+              }}>
               {signLoading ? 'Enregistrement…' : 'Signer et passer au paiement'}
             </button>
           </div>
