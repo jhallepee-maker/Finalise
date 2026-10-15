@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useAuth } from '../AuthContext'
 import api from '../api'
 import { buildMessage, waLink, mailLink } from '../share'
+import { pushState, enablePush, disablePush } from '../push'
 
 const LABELS = {
   en_attente: 'En attente',
@@ -44,6 +45,10 @@ function StatTile({ label, value, sub, accent }) {
 
 export default function Dashboard() {
   const [pro, setPro] = useState(null)
+  const [push, setPush] = useState(null)
+  const [pushErr, setPushErr] = useState('')
+  useEffect(() => { pushState().then(setPush) }, [])
+  const togglePush = async () => { try { if (push === 'on') await disablePush(); else await enablePush() } catch (e) { setPushErr(e.message) } setPush(await pushState()) }
   const actAs = (() => { try { return JSON.parse(localStorage.getItem('actAs') || 'null') } catch { return null } })()
   useEffect(() => { api.get('/api/profil').then(r => setPro(r.data)).catch(() => {}) }, [])
   const { user, logout, refreshUser } = useAuth()
@@ -92,12 +97,25 @@ export default function Dashboard() {
             <span style={{ fontSize: 13, color: 'var(--fg2)' }}>
               {user?.prenom || user?.nom}
             </span>
+            {push === 'on' && <button className="btn btn-ghost" title="Désactiver les notifications" onClick={togglePush}>🔔</button>}
             <Link to="/equipe" className="btn btn-ghost">Bureau</Link>
             <Link to="/profil" className="btn btn-ghost">Mon profil</Link>
             <button className="btn btn-ghost" onClick={logout}>Déconnexion</button>
           </div>
         </div>
 
+        {push === 'off' && (
+          <div className="todo-box" style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <span>🔔 Soyez prévenu à la seconde où un client signe ou paie.</span>
+            <button className="btn btn-primary" onClick={togglePush}>Activer les notifications</button>
+            {pushErr && <span className="error-msg" style={{ width: '100%' }}>{pushErr}</span>}
+          </div>
+        )}
+        {push === 'ios-install' && (
+          <div className="todo-box" style={{ marginBottom: 16 }}>
+            🔔 Pour recevoir les notifications sur iPhone : dans Safari, touchez <strong>Partager</strong> puis <strong>Sur l'écran d'accueil</strong>, et ouvrez Finalise depuis son icône.
+          </div>
+        )}
         {actAs && (
           <div className="todo-box" style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <span>Vous gérez les devis de <strong>{actAs.nom}</strong>.</span>

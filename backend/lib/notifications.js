@@ -3,6 +3,7 @@ const { sendMail } = require('./mailer');
 const { loadJustificatif, renderJustificatifPdf } = require('./justificatif');
 const { getFactureByToken } = require('../services/factureService');
 const { renderFacturePdf } = require('./facturePdf');
+const { sendToPro } = require('./push');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtEUR = n => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(Number(n));
@@ -51,6 +52,7 @@ async function notifyDevisCreated(devisId) {
 async function notifySigned(devisId) {
   const d = await loadDevis(devisId);
   if (!d) return;
+  await sendToPro(d.pro_id, { title: 'Devis signé ✍️', body: `${d.client_nom || 'Votre client'} a signé · ${fmtEUR(d.montant_ttc)}${d.objet ? ' · ' + d.objet : ''}`, url: `/devis/${d.id}` });
   await sendMail({
     to: d.pro_email,
     subject: `${d.client_nom || 'Votre client'} a signé votre devis`,
@@ -65,6 +67,7 @@ async function notifySigned(devisId) {
 async function notifyPaid(devisId) {
   const d = await loadDevis(devisId);
   if (!d) return;
+  await sendToPro(d.pro_id, { title: 'Paiement reçu 💸', body: `${d.client_nom || 'Votre client'} a payé ${fmtEUR(d.montant_ttc)}${d.objet ? ' · ' + d.objet : ''}`, url: `/devis/${d.id}` });
 
   let attachments;
   try {

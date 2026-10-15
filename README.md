@@ -40,3 +40,6 @@ La prime n'est pas fournie par l'API Meetch : elle se calcule côté Finalise av
 
 ## Mode bureau
 Un guide crée un bureau (page `/equipe`), invite des comptes existants (guide ou secrétaire) ; l'invité doit accepter avec le code (aucun ajout à son insu). Admin et secrétaire gèrent les devis d'un guide via l'en-tête `X-Act-As` (uniquement `/api/devis` et la lecture de `/api/profil`). Le devis, les CGV, le compte Stripe et les factures restent ceux du guide ; `devis.created_by` garde la trace de qui a saisi.
+
+## Notifications push
+Web Push (VAPID) : `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` sur Railway. Le pro active les notifications depuis le dashboard (sur iPhone : d'abord « Sur l'écran d'accueil »). Envoyées à la signature et au paiement d'un devis ; les appareils expirés sont nettoyés automatiquement. Les apps natives (Capacitor) réutiliseront le même circuit via FCM/APNs.

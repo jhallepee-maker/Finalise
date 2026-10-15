@@ -7,6 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      workbox: { importScripts: ['/push-sw.js'] },
       manifest: {
         name: 'Finalise',
         short_name: 'Finalise',

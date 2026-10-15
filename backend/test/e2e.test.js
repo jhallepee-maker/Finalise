@@ -179,3 +179,33 @@ test('mode bureau : le profil du guide est lisible mais jamais modifiable par la
     await db.query('DELETE FROM pros WHERE id = ANY($1)', [[boss.id, guide.id]]).catch(() => {});
   }
 });
+
+test('push : abonnement, envoi, nettoyage des appareils expirés', async () => {
+  const keys = require('web-push').generateVAPIDKeys();
+  process.env.VAPID_PUBLIC_KEY = keys.publicKey; process.env.VAPID_PRIVATE_KEY = keys.privateKey;
+  const wp = require('web-push'); const calls = [];
+  const realSend = wp.sendNotification;
+  wp.sendNotification = async (sub, payload) => { calls.push({ ep: sub.endpoint, payload: JSON.parse(payload) }); if (sub.endpoint.includes('gone')) { const e = new Error('gone'); e.statusCode = 410; throw e; } };
+  const e = `push${Date.now()}@test.fr`;
+  const r = await api('POST', '/api/auth/register', { email: e, password: 'motdepasse1', nom: 'Pu', accept_cgu: true });
+  const id = r.body.pro.id, jwt = r.body.token;
+  try {
+    assert.equal((await api('GET', '/api/push/key')).body.key, keys.publicKey);
+    assert.equal((await api('POST', '/api/push/subscribe', { subscription: { endpoint: 'http://non-https', keys: {} } }, jwt)).status, 400);
+    assert.equal((await api('POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/ok', keys: { p256dh: 'a', auth: 'b' } } })).status, 401);
+    assert.equal((await api('POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/ok', keys: { p256dh: 'a', auth: 'b' } } }, jwt)).status, 201);
+    assert.equal((await api('POST', '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/gone', keys: { p256dh: 'a', auth: 'b' } } }, jwt)).status, 201);
+    const t = await api('POST', '/api/push/test', null, jwt);
+    assert.equal(t.status, 200); assert.equal(t.body.sent, 1);
+    assert.equal(calls.length, 2);
+    assert.equal((await db.query('SELECT count(*)::int n FROM push_subscriptions WHERE pro_id=$1', [id])).rows[0].n, 1); // l'appareil expiré est supprimé
+    // une notification de paiement atteint bien l'appareil restant
+    const { notifyPaid } = require('../lib/notifications');
+    const { rows } = await db.query(`INSERT INTO devis (pro_id, token_unique, objet, description, montant_ttc, montant_ht, statut, client_nom) VALUES ($1,$2,'Sortie','Sortie',250,250,'paye','Marie') RETURNING id`, [id, 'tk' + Date.now()]);
+    calls.length = 0; await notifyPaid(rows[0].id); assert.ok(calls.some(c => /Marie a payé/.test(c.payload.body)), JSON.stringify(calls));
+  } finally {
+    wp.sendNotification = realSend; delete process.env.VAPID_PUBLIC_KEY; delete process.env.VAPID_PRIVATE_KEY;
+    await db.query('DELETE FROM devis WHERE pro_id=$1', [id]).catch(() => {});
+    await db.query('DELETE FROM pros WHERE id=$1', [id]).catch(() => {});
+  }
+});

@@ -40,6 +40,7 @@ app.use('/api/auth',    require('./routes/auth'));
 const actAs = require('./middleware/actAs');
 app.use('/api/profil',  (req, res, next) => (req.method === 'GET' ? actAs(req, res, next) : next()), require('./routes/profil'));
 app.use('/api/devis',   actAs, require('./routes/devis'));
+app.use('/api/push',    require('./routes/push'));
 app.use('/api/org',     require('./routes/org'));
 app.use('/api/paiement',require('./routes/paiement'));
 app.use('/api/stripe',  require('./routes/stripe'));
