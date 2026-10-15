@@ -1,0 +1,7 @@
+{
+  "appId": "fr.finalise.app",
+  "appName": "Finalise",
+  "webDir": "dist",
+  "server": { "androidScheme": "https" },
+  "ios": { "contentInset": "always" }
+}
