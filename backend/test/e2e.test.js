@@ -220,6 +220,12 @@ test('devis avec beaucoup de dates (résumé long) créé sans erreur', async ()
     const dates = Array.from({ length: 8 }, (_, i) => ({ date: `2031-07-${String(10 + i).padStart(2, '0')}`, mode: 'creneau', debut: '04:00', fin: '15:00' }));
     const c = await api('POST', '/api/devis', { objet: 'Traversée longue', montant: 900, dates, participants_max: 4 }, jwt);
     assert.equal(c.status, 201, JSON.stringify(c.body));
+    // médiateur : enregistré dans le profil puis exposé au client sur la page publique
+    const pr = await api('PUT', '/api/profil', { nom: 'Da', siret: '12345678901234', mediateur: 'Médiateur X, 1 rue Y, mediateur-x.fr' }, jwt);
+    assert.equal(pr.status, 200, JSON.stringify(pr.body));
+    assert.equal(pr.body.mediateur, 'Médiateur X, 1 rue Y, mediateur-x.fr');
+    const pub = await api('GET', '/api/devis/token/' + c.body.token_unique);
+    assert.equal(pub.body.mediateur, 'Médiateur X, 1 rue Y, mediateur-x.fr', JSON.stringify(pub.body).slice(0, 300));
   } finally {
     await db.query('DELETE FROM devis WHERE pro_id=$1', [id]).catch(() => {});
     await db.query('DELETE FROM pros WHERE id=$1', [id]).catch(() => {});
