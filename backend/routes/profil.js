@@ -5,7 +5,7 @@ const { verifyJWT } = require('../middleware/auth');
 const { HttpError, handle } = require('../lib/httpError');
 const router = express.Router();
 
-const COLS = 'id, email, nom, prenom, activite, siret, telephone, adresse, code_postal, ville, tva_franchise, cgv_url';
+const COLS = 'id, email, nom, prenom, activite, siret, telephone, adresse, code_postal, ville, tva_franchise, cgv_url, mediateur';
 const str = (v, max) => String(v ?? '').trim().slice(0, max);
 
 const langOf = (q) => (String(q.langue || 'fr').toLowerCase() === 'en' ? 'en' : 'fr');
@@ -60,11 +60,11 @@ router.put('/', verifyJWT, handle(async (req, res) => {
 
   const { rows } = await db.query(
     `UPDATE pros SET nom=$2, prenom=$3, activite=$4, siret=$5, telephone=$6, adresse=$7,
-       code_postal=$8, ville=$9, tva_franchise=$10, cgv_url=$11
+       code_postal=$8, ville=$9, tva_franchise=$10, cgv_url=$11, mediateur=$12
      WHERE id=$1 RETURNING ${COLS}`,
     [req.user.id, nom, str(b.prenom, 100) || null, str(b.activite, 150) || null, siret || null,
      str(b.telephone, 30) || null, str(b.adresse, 255) || null, str(b.code_postal, 10) || null,
-     str(b.ville, 120) || null, b.tva_franchise === true, cgv || null]
+     str(b.ville, 120) || null, b.tva_franchise === true, cgv || null, str(b.mediateur, 400) || null]
   );
   res.json({ ...rows[0], cgv_pdf: await cgvInfo(req.user.id) });
 }));

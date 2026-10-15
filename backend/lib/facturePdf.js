@@ -74,6 +74,7 @@ function renderFacturePdf(f) {
     doc.moveDown(0.6).fontSize(8).fillColor('#777');
     if (pro.tva_franchise) doc.text('TVA non applicable, art. 293 B du CGI.');
     doc.text('Paiement comptant : aucun escompte. En cas de retard, pénalités et indemnité forfaitaire de recouvrement de 40 € (art. L441-10 du Code de commerce) — sans objet, facture acquittée.');
+    if (pro.mediateur) doc.text('Médiateur de la consommation : ' + pro.mediateur.replace(/\s*\n\s*/g, ', '));
     doc.end();
   });
 }

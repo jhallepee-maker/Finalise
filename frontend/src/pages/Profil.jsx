@@ -107,6 +107,13 @@ export default function Profil() {
             <div className="form-hint">Moins sûr : si la page change après la signature, vous ne pourrez pas prouver ce que le client a accepté. Préférez le PDF.</div>
           </div>
         </div>
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Médiateur de la consommation</label>
+            <textarea rows={3} value={p.mediateur || ''} onChange={set('mediateur')} placeholder="Nom, adresse postale et site web du médiateur dont vous relevez" maxLength={400} />
+            <div className="form-hint">Obligatoire pour toute vente à un particulier (art. L612-1 et R616-1 du Code de la consommation). Il sera indiqué à vos clients sur le devis et la facture. Renseignez-le auprès de votre organisation professionnelle ou d'un médiateur référencé.</div>
+          </div>
+        </div>
         <button type="submit" className="btn btn-primary btn-lg" disabled={loading}>{loading ? 'Enregistrement…' : 'Enregistrer'}</button>
       </form>
       <button className="btn btn-ghost" style={{ marginTop: 24 }} onClick={logout}>Se déconnecter</button>

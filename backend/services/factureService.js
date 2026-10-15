@@ -10,7 +10,7 @@ async function issueFacture(devisId) {
 
     const { rows } = await tx.query(
       `SELECT d.*, p.nom, p.prenom, p.activite, p.siret, p.adresse, p.code_postal, p.ville,
-              p.telephone, p.email AS pro_email, p.tva_franchise
+              p.telephone, p.email AS pro_email, p.tva_franchise, p.mediateur
          FROM devis d JOIN pros p ON p.id=d.pro_id WHERE d.id=$1 FOR UPDATE OF d`, [devisId]
     );
     const d = rows[0];
@@ -28,7 +28,7 @@ async function issueFacture(devisId) {
       pro: {
         nom: [d.prenom, d.nom].filter(Boolean).join(' '), activite: d.activite, siret: d.siret,
         adresse: [d.adresse, [d.code_postal, d.ville].filter(Boolean).join(' ')].filter(Boolean).join(', '),
-        telephone: d.telephone, email: d.pro_email, tva_franchise: d.tva_mode ? d.tva_mode === 'non_applicable' : !!d.tva_franchise,
+        telephone: d.telephone, email: d.pro_email, mediateur: d.mediateur, tva_franchise: d.tva_mode ? d.tva_mode === 'non_applicable' : !!d.tva_franchise,
       },
       client: { nom: d.client_nom, email: d.client_email, tel: d.client_tel, adresse: d.client_adresse },
       paye_at: pay[0]?.paye_at || new Date().toISOString(),

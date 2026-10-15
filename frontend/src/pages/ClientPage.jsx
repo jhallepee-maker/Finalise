@@ -399,6 +399,7 @@ export default function ClientPage() {
             ))}
             <div className="legal-notice">
               Prestation de loisirs à date précise : le droit de rétractation de 14 jours ne s'applique pas. Le paiement de {fmt(devis.montant_ttc)} est exigé en totalité à la commande.
+              {devis.mediateur && <> En cas de litige, vous pouvez recourir gratuitement au médiateur de la consommation : {devis.mediateur}.</>}
             </div>
             {reste.length > 0 ? (
               <div className="progress-box" role={tried ? 'alert' : 'status'}>

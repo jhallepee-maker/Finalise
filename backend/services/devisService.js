@@ -192,7 +192,7 @@ async function getLignes(devisId) {
 // Vue publique pour le client (lien unique). Retourne null si introuvable.
 async function getPublicDevis(token) {
   const { rows } = await db.query(
-    `SELECT d.*, p.nom AS pro_nom, p.prenom AS pro_prenom, p.activite, p.cgv_url, p.cgv_version_id AS pro_cgv_fr, p.cgv_en_version_id AS pro_cgv_en, p.tva_franchise AS pro_franchise
+    `SELECT d.*, p.nom AS pro_nom, p.prenom AS pro_prenom, p.activite, p.cgv_url, p.mediateur, p.cgv_version_id AS pro_cgv_fr, p.cgv_en_version_id AS pro_cgv_en, p.tva_franchise AS pro_franchise
        FROM devis d JOIN pros p ON d.pro_id = p.id WHERE d.token_unique=$1`, [token]
   );
   const d = rows[0];
@@ -209,6 +209,7 @@ async function getPublicDevis(token) {
     tva_franchise: d.tva_mode ? d.tva_mode === 'non_applicable' : !!d.pro_franchise,
     statut: d.statut, expire_at: d.expire_at,
     pro_nom: [d.pro_prenom, d.pro_nom].filter(Boolean).join(' '), activite: d.activite,
+    mediateur: d.mediateur || null,
     cgv_langue: d.cgv_langue || 'fr',
     cgv_url: (d.cgv_langue || 'fr') === 'fr' ? (d.cgv_url || null) : null,
     cgv_pdf: !!(d.cgv_version_id || ((d.cgv_langue || 'fr') === 'en' ? d.pro_cgv_en : d.pro_cgv_fr)),
