@@ -87,7 +87,7 @@ export default function DevisDetail() {
 
         {/* En-tête */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8, flexWrap: 'wrap' }}>
-          <h1 style={{ margin: 0 }}>{devis.client_nom || 'Client sans nom'}</h1>
+          <h1 style={{ margin: 0 }}>{devis.client_nom || devis.objet || 'Devis'}</h1>
           <span className={`badge badge-${devis.statut}`}>{LABELS[devis.statut]}</span>
           {devis.assurance_choix === 'oui' && (
             <span className="badge" title="Assurance annulation Meetch">
@@ -211,7 +211,7 @@ export default function DevisDetail() {
             {calEvents(devis).length > 0 && (
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
                 <a className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 13 }} href={icsHref(devis)} download={`${devis.numero || 'devis'}.ics`}>＋ Agenda (.ics)</a>
-                {calEvents(devis).map((e, i) => <a key={i} className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 13 }} href={e.google} target="_blank" rel="noreferrer">Google Agenda</a>)}
+                {calEvents(devis).map((e, i) => <a key={i} className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: 13 }} href={e.google} target="_blank" rel="noreferrer">Google Agenda{calEvents(devis).length > 1 ? ` · ${new Date(e.date + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}` : ''}</a>)}
               </div>
             )}
             {devis.participants_max > 0 && (

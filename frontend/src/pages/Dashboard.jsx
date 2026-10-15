@@ -193,8 +193,8 @@ export default function Dashboard() {
               <div key={d.id} className="devis-item">
               <Link to={`/devis/${d.id}`} className="devis-row">
                 <div className="devis-row-left">
-                  <span className="devis-client">{d.client_nom || 'Client sans nom'}</span>
-                  <span className="devis-desc">{d.description}</span>
+                  <span className="devis-client">{d.client_nom || d.objet || 'Devis'}</span>
+                  <span className="devis-desc">{d.client_nom ? (d.objet || d.description) : 'Le client renseignera ses informations'}</span>
                 </div>
                 <div className="devis-row-right">
                   <span className="devis-amount">{fmt(d.montant_ttc)}</span>
