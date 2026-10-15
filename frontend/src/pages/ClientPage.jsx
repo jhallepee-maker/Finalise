@@ -242,31 +242,39 @@ export default function ClientPage() {
 
   if (!devis && step !== 'done') return <div className="loading"><div className="spinner" /></div>
 
-  if (step === 'done') return (
-    <div className="success-page">
-      <div className="success-icon">✓</div>
-      <h2>Paiement confirmé</h2>
-      {devis && (
-        <div style={{ fontSize: 28, fontWeight: 700, letterSpacing: '-.5px', fontVariantNumeric: 'tabular-nums', margin: '4px 0 8px' }}>
-          {fmt(devis.montant_ttc)}
+  if (step === 'done') {
+    const API_BASE = import.meta.env.VITE_API_URL || ''
+    return (
+      <div className="client-page">
+        <header className="hero hero-done">
+          <div className="client-logo">Finalise</div>
+          <div className="done-check" aria-hidden="true">✓</div>
+          <h1>{devis ? 'Votre sortie est réservée' : 'Paiement confirmé'}</h1>
+          {devis && <div className="hero-pro">avec {devis.pro_nom}{devis.activite ? `, ${devis.activite}` : ''}</div>}
+        </header>
+
+        {devis && (
+          <div className="card done-card">
+            <div className="line-item"><span className="line-item-label">Prestation</span><span className="line-item-value">{devis.objet || 'Votre prestation'}</span></div>
+            {devis.dates.length > 0 && (
+              <div className="line-item"><span className="line-item-label">{devis.dates.length > 1 ? 'Dates' : 'Date'}</span>
+                <span className="line-item-value done-dates">{devis.dates.map(d => <span key={d.label}>{d.label}</span>)}</span></div>
+            )}
+            <div className="line-item line-item-total"><span className="line-item-label">Payé</span><span className="line-item-value">{fmt(devis.montant_ttc)}</span></div>
+          </div>
+        )}
+
+        <div className="done-section">
+          <h3>Vos documents</h3>
+          <div className="doc-links">
+            <a className="btn btn-secondary" href={`${API_BASE}/api/paiement/facture/${token}`} target="_blank" rel="noreferrer">Facture acquittée (PDF)</a>
+            <a className="btn btn-secondary" href={`${API_BASE}/api/paiement/justificatif/${token}`} target="_blank" rel="noreferrer">Justificatif de signature (PDF)</a>
+          </div>
         </div>
-      )}
-      <p>Merci — votre paiement a bien été reçu. Une confirmation vous sera transmise par le prestataire.</p>
-      {devis && <Agenda devis={devis} nom={devis.pro_nom} />}
-      <p style={{ marginTop: 16 }}>
-        <a href={`${import.meta.env.VITE_API_URL || ''}/api/paiement/facture/${token}`}
-           target="_blank" rel="noreferrer" style={{ fontSize: 14 }}>
-          Télécharger la facture acquittée (PDF)
-        </a>
-      </p>
-      <p style={{ marginTop: 8 }}>
-        <a href={`${import.meta.env.VITE_API_URL || ''}/api/paiement/justificatif/${token}`}
-           target="_blank" rel="noreferrer" style={{ fontSize: 14 }}>
-          Télécharger le justificatif de signature (PDF)
-        </a>
-      </p>
-    </div>
-  )
+        {devis && <div className="done-section"><Agenda devis={devis} nom={devis.pro_nom} /></div>}
+      </div>
+    )
+  }
 
   const stripeOptions = clientSecret ? {
     clientSecret,
