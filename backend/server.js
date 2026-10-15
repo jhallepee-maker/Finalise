@@ -43,5 +43,9 @@ app.use('/api/assurance', require('./routes/assurance'));
 
 app.get('/health', (req, res) => res.json({ status: 'ok', env: process.env.NODE_ENV }));
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Finalise backend → port ${PORT}`));
+module.exports = app; // importable par les tests
+
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Finalise backend → port ${PORT}`));
+}
