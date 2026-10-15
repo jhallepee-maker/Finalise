@@ -17,6 +17,8 @@ export default function Confidentialite() {
         <p>Les devis, factures et preuves de signature sont conservés 10 ans (obligations comptables et preuve), puis supprimés.</p>
         <h3>Qui y a accès ?</h3>
         <p>Le professionnel, Finalise (hébergement : Railway, Vercel), Stripe (paiement) et, le cas échéant, un prestataire d'envoi d'emails. Certains de ces prestataires peuvent traiter des données hors de l'Union européenne, avec les garanties prévues par le RGPD.</p>
+        <h3>Assurance annulation (facultative)</h3>
+        <p>Si le professionnel vous propose une assurance annulation et que vous répondez « oui », vos nom, email, téléphone, adresse éventuelle, la date et le montant de la prestation sont transmis à <strong>Meetch</strong>, l'assureur partenaire, pour établir votre contrat et traiter une éventuelle demande de remboursement. Meetch les traite selon sa propre politique de confidentialité. Si vous répondez « non », aucune donnée ne lui est transmise.</p>
         <h3>Vos droits</h3>
         <p>Accès, rectification, effacement (dans la limite des obligations de conservation), opposition, limitation, portabilité : écrivez au professionnel indiqué sur votre devis. Vous pouvez aussi saisir la CNIL (cnil.fr).</p>
       </div>
