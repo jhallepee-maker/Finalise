@@ -37,3 +37,6 @@ La prime n'est pas fournie par l'API Meetch : elle se calcule côté Finalise av
 - `scripts/backup.sh` : dump chiffré (AES-256) de la base, 30 sauvegardes conservées, restauration documentée en tête du script. À lancer régulièrement depuis un poste de confiance, jamais depuis un dépôt public (les dumps contiennent des données clients).
 - `GET /health` (léger, utilisé par Railway) et `GET /health/db` (vérifie PostgreSQL) : brancher `/health/db` sur un moniteur d'uptime gratuit (UptimeRobot, Better Stack).
 - Les erreurs serveur sont journalisées en une ligne JSON (méthode, chemin, message), sans corps de requête ni données personnelles.
+
+## Mode bureau
+Un guide crée un bureau (page `/equipe`), invite des comptes existants (guide ou secrétaire) ; l'invité doit accepter avec le code (aucun ajout à son insu). Admin et secrétaire gèrent les devis d'un guide via l'en-tête `X-Act-As` (uniquement `/api/devis` et la lecture de `/api/profil`). Le devis, les CGV, le compte Stripe et les factures restent ceux du guide ; `devis.created_by` garde la trace de qui a saisi.

@@ -44,6 +44,7 @@ function StatTile({ label, value, sub, accent }) {
 
 export default function Dashboard() {
   const [pro, setPro] = useState(null)
+  const actAs = (() => { try { return JSON.parse(localStorage.getItem('actAs') || 'null') } catch { return null } })()
   useEffect(() => { api.get('/api/profil').then(r => setPro(r.data)).catch(() => {}) }, [])
   const { user, logout, refreshUser } = useAuth()
   const [devis, setDevis]             = useState([])
@@ -91,13 +92,21 @@ export default function Dashboard() {
             <span style={{ fontSize: 13, color: 'var(--fg2)' }}>
               {user?.prenom || user?.nom}
             </span>
+            <Link to="/equipe" className="btn btn-ghost">Bureau</Link>
             <Link to="/profil" className="btn btn-ghost">Mon profil</Link>
             <button className="btn btn-ghost" onClick={logout}>Déconnexion</button>
           </div>
         </div>
 
+        {actAs && (
+          <div className="todo-box" style={{ marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+            <span>Vous gérez les devis de <strong>{actAs.nom}</strong>.</span>
+            <button className="btn btn-secondary" onClick={() => { try { localStorage.removeItem('actAs') } catch {} window.location.reload() }}>Revenir à mon compte</button>
+          </div>
+        )}
+
         {/* Bandeau Stripe Connect */}
-        {!user?.charges_enabled && !stripeMsg && (
+        {!actAs && !user?.charges_enabled && !stripeMsg && (
           <div className="stripe-banner">
             <div>
               <strong>{user?.stripe_account_id ? 'Terminez votre inscription Stripe' : 'Activez les paiements'}</strong>

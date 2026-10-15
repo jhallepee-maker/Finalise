@@ -9,6 +9,7 @@ const router  = express.Router();
 // POST /api/devis — créer un devis (lignes, date de prestation, champs client à compléter) et son lien unique
 router.post('/', verifyJWT, handle(async (req, res) => {
   const d = await createDevis(req.user.id, req.body || {});
+  if (req.user.actor) await db.query('UPDATE devis SET created_by=$2 WHERE id=$1', [d.id, req.user.actor]);
   fire(notifyDevisCreated, d.id);
   res.status(201).json(d);
 }));

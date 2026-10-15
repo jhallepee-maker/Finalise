@@ -36,8 +36,11 @@ app.use('/api/devis/token', limiter(60 * 1000, 60));
 
 // Routes
 app.use('/api/auth',    require('./routes/auth'));
-app.use('/api/profil',  require('./routes/profil'));
-app.use('/api/devis',   require('./routes/devis'));
+// Lecture seule du profil du guide (nom, CGV, TVA) pour préparer ses devis ; toute modification reste personnelle
+const actAs = require('./middleware/actAs');
+app.use('/api/profil',  (req, res, next) => (req.method === 'GET' ? actAs(req, res, next) : next()), require('./routes/profil'));
+app.use('/api/devis',   actAs, require('./routes/devis'));
+app.use('/api/org',     require('./routes/org'));
 app.use('/api/paiement',require('./routes/paiement'));
 app.use('/api/stripe',  require('./routes/stripe'));
 app.use('/api/assurance', require('./routes/assurance'));

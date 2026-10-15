@@ -7,6 +7,13 @@ const api = axios.create({ baseURL: BASE })
 api.interceptors.request.use(cfg => {
   const token = localStorage.getItem('token')
   if (token) cfg.headers.Authorization = `Bearer ${token}`
+  // Mode bureau : agir pour un guide (devis en lecture/écriture, profil en lecture seule uniquement)
+  try {
+    const a = JSON.parse(localStorage.getItem('actAs') || 'null')
+    const url = cfg.url || ''
+    const m = (cfg.method || 'get').toLowerCase()
+    if (a?.id && (url.startsWith('/api/devis') || (url === '/api/profil' && m === 'get'))) cfg.headers['X-Act-As'] = a.id
+  } catch { /* stockage indisponible : on agit pour soi */ }
   return cfg
 })
 

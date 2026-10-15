@@ -93,3 +93,89 @@ test('santé et robustesse', async () => {
   const bad = await fetch(base + '/api/auth/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{pas du json' });
   assert.equal(bad.status, 400);
 });
+
+test('mode bureau : invitations avec consentement, agir pour un guide, cloisonnement', async () => {
+  const mk = async (tag) => {
+    const e = `org${tag}${Date.now()}@test.fr`;
+    const r = await api('POST', '/api/auth/register', { email: e, password: 'motdepasse1', nom: 'N' + tag, accept_cgu: true });
+    return { id: r.body.pro.id, email: e, jwt: r.body.token };
+  };
+  const [boss, guide, sec, other] = [await mk('b'), await mk('g'), await mk('s'), await mk('o')];
+  const ids = [boss.id, guide.id, sec.id, other.id];
+  try {
+    const org = await api('POST', '/api/org', { nom: 'Bureau des guides' }, boss.jwt);
+    assert.equal(org.status, 201);
+    assert.equal((await api('POST', '/api/org', { nom: 'Autre' }, boss.jwt)).status, 409);
+
+    // seul l'admin invite ; rôle admin non invitable
+    assert.equal((await api('POST', '/api/org/invitations', { email: guide.email, role: 'guide' }, guide.jwt)).status, 403);
+    assert.equal((await api('POST', '/api/org/invitations', { email: guide.email, role: 'admin' }, boss.jwt)).status, 400);
+    const ig = (await api('POST', '/api/org/invitations', { email: guide.email, role: 'guide' }, boss.jwt)).body.code;
+    const is = (await api('POST', '/api/org/invitations', { email: sec.email, role: 'secretaire' }, boss.jwt)).body.code;
+
+    // une invitation ne sert qu'au compte invité
+    assert.equal((await api('POST', '/api/org/accept', { code: ig }, other.jwt)).status, 404);
+    assert.equal((await api('POST', '/api/org/accept', { code: ig }, guide.jwt)).status, 200);
+    assert.equal((await api('POST', '/api/org/accept', { code: is }, sec.jwt)).status, 200);
+    assert.equal((await api('POST', '/api/org/accept', { code: ig }, guide.jwt)).status, 409);
+
+    // la secrétaire a besoin des CGV du guide pour créer un devis à son nom
+    await db.query(`UPDATE pros SET stripe_account_id='acct_g', charges_enabled=true, siret='12345678901234', adresse='1 rue', code_postal='74000', ville='Annecy' WHERE id=$1`, [guide.id]);
+    const up = await fetch(base + '/api/profil/cgv?langue=fr&nom=cgv.pdf', { method: 'PUT', headers: { 'content-type': 'application/pdf', authorization: 'Bearer ' + guide.jwt }, body: Buffer.from('%PDF-1.4 ' + 'g'.repeat(300)) });
+    assert.equal(up.status, 200);
+
+    const asGuide = (jwt, who) => ({ authorization: 'Bearer ' + jwt, 'content-type': 'application/json', 'x-act-as': who });
+    const post = (headers, body) => fetch(base + '/api/devis', { method: 'POST', headers, body: JSON.stringify(body) });
+    const dv = await post(asGuide(sec.jwt, guide.id), { objet: 'Sortie bureau', montant: 120, dates: [{ date: '2031-08-01', mode: 'journee' }], participants_max: 2 });
+    assert.equal(dv.status, 201, JSON.stringify(await dv.clone().json()));
+    const created = await dv.json();
+    const row = (await db.query('SELECT pro_id, created_by FROM devis WHERE id=$1', [created.id])).rows[0];
+    assert.equal(row.pro_id, guide.id); assert.equal(row.created_by, sec.id);
+
+    // la secrétaire voit les devis du guide ; le guide aussi ; un tiers non
+    const list = await (await fetch(base + '/api/devis', { headers: { authorization: 'Bearer ' + sec.jwt, 'x-act-as': guide.id } })).json();
+    assert.ok(list.some(d => d.id === created.id));
+    const own = await api('GET', '/api/devis', null, guide.jwt);
+    assert.ok(own.body.some(d => d.id === created.id));
+    assert.equal((await post(asGuide(other.jwt, guide.id), { objet: 'x', montant: 1 })).status, 403);
+    // sans l'en-tête, la secrétaire ne voit que ses propres devis
+    assert.equal((await api('GET', '/api/devis', null, sec.jwt)).body.length, 0);
+    // un guide ne peut pas agir pour la secrétaire ni pour le patron
+    assert.equal((await post(asGuide(guide.jwt, boss.id), { objet: 'x', montant: 1 })).status, 403);
+    assert.equal((await post(asGuide(boss.jwt, sec.id), { objet: 'x', montant: 1 })).status, 403);
+    // agir pour soi-même reste possible
+    assert.equal((await fetch(base + '/api/devis', { headers: { authorization: 'Bearer ' + boss.jwt, 'x-act-as': boss.id } })).status, 200);
+
+    // départ : le dernier admin ne peut pas partir ; la secrétaire peut se retirer
+    assert.equal((await api('DELETE', '/api/org/membres/' + boss.id, null, boss.jwt)).status, 409);
+    assert.equal((await api('DELETE', '/api/org/membres/' + sec.id, null, sec.jwt)).status, 200);
+    assert.equal((await post(asGuide(sec.jwt, guide.id), { objet: 'x', montant: 1 })).status, 403);
+    const o = await api('GET', '/api/org', null, boss.jwt);
+    assert.equal(o.body.membres.length, 2);
+  } finally {
+    await db.query('DELETE FROM devis WHERE pro_id = ANY($1)', [ids]).catch(() => {});
+    await db.query('UPDATE pros SET org_id=NULL WHERE id = ANY($1)', [ids]);
+    await db.query('DELETE FROM organisations WHERE created_by = ANY($1)', [ids]);
+    await db.query('DELETE FROM pros WHERE id = ANY($1)', [ids]).catch(() => {});
+  }
+});
+
+test('mode bureau : le profil du guide est lisible mais jamais modifiable par la secrétaire', async () => {
+  const mk = async (tag) => { const e = `p${tag}${Date.now()}@test.fr`; const r = await api('POST', '/api/auth/register', { email: e, password: 'motdepasse1', nom: 'P' + tag, accept_cgu: true }); return { id: r.body.pro.id, email: e, jwt: r.body.token }; };
+  const [boss, guide] = [await mk('b'), await mk('g')];
+  try {
+    await api('POST', '/api/org', { nom: 'B' }, boss.jwt);
+    const c = (await api('POST', '/api/org/invitations', { email: guide.email, role: 'guide' }, boss.jwt)).body.code;
+    await api('POST', '/api/org/accept', { code: c }, guide.jwt);
+    const h = { authorization: 'Bearer ' + boss.jwt, 'content-type': 'application/json', 'x-act-as': guide.id };
+    assert.equal((await (await fetch(base + '/api/profil', { headers: h })).json()).id, guide.id);        // lecture : profil du guide
+    await fetch(base + '/api/profil', { method: 'PUT', headers: h, body: JSON.stringify({ nom: 'PIRATE' }) });  // écriture : ignorée côté guide
+    assert.equal((await db.query('SELECT nom FROM pros WHERE id=$1', [guide.id])).rows[0].nom, 'Pg');
+    const me = await api('GET', '/api/auth/me', null, boss.jwt);
+    assert.equal(me.body.id, boss.id);
+  } finally {
+    await db.query('UPDATE pros SET org_id=NULL WHERE id = ANY($1)', [[boss.id, guide.id]]);
+    await db.query('DELETE FROM organisations WHERE created_by=$1', [boss.id]);
+    await db.query('DELETE FROM pros WHERE id = ANY($1)', [[boss.id, guide.id]]).catch(() => {});
+  }
+});
