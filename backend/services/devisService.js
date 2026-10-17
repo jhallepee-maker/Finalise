@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('../db');
 const { HttpError } = require('../lib/httpError');
+const front = require('../lib/front');
 const { nextNumero } = require('../lib/numerotation');
 
 // Champs client que le devis peut exiger : clé côté API → colonne en base
@@ -158,7 +159,7 @@ async function createDevis(proId, body, updateId = null) {
           [updateId, i, lignes[i].description, lignes[i].quantite, lignes[i].prix_unitaire_ht, lignes[i].prix_unitaire_ttc]
         );
       }
-      return { ...rows[0], lignes, dates, lien_unique: `${process.env.FRONTEND_URL}/p/${ex[0].token_unique}` };
+      return { ...rows[0], lignes, dates, lien_unique: `${front()}/p/${ex[0].token_unique}` };
     }
     const numero = await nextNumero(tx, proId, 'devis');
     const { rows } = await tx.query(
@@ -177,7 +178,7 @@ async function createDevis(proId, body, updateId = null) {
         [devis.id, i, lignes[i].description, lignes[i].quantite, lignes[i].prix_unitaire_ht, lignes[i].prix_unitaire_ttc]
       );
     }
-    return { ...devis, lignes, dates, lien_unique: `${process.env.FRONTEND_URL}/p/${token}` };
+    return { ...devis, lignes, dates, lien_unique: `${front()}/p/${token}` };
   });
 }
 

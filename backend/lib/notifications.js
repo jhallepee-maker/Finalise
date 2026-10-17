@@ -1,6 +1,7 @@
 const db = require('./../db');
 const { sendMail } = require('./mailer');
 const { loadJustificatif, renderJustificatifPdf } = require('./justificatif');
+const front = require('./front');
 const { getFactureByToken } = require('../services/factureService');
 const { renderFacturePdf } = require('./facturePdf');
 const { sendToPro } = require('./push');
@@ -34,7 +35,7 @@ const proName = d => [d.pro_prenom, d.pro_nom].filter(Boolean).join(' ');
 async function notifyDevisCreated(devisId) {
   const d = await loadDevis(devisId);
   if (!d || !d.client_email) return;
-  const link = `${process.env.FRONTEND_URL}/p/${d.token_unique}`;
+  const link = `${front()}/p/${d.token_unique}`;
   await sendMail({
     to: d.client_email,
     subject: `Votre devis de ${proName(d)} — ${fmtEUR(d.montant_ttc)}`,
@@ -59,7 +60,7 @@ async function notifySigned(devisId) {
     html: layout('Devis signé',
       `<p>${esc(d.client_nom || 'Votre client')} vient de signer le devis « ${esc(d.description)} » (${fmtEUR(d.montant_ttc)} TTC).</p>
        <p>Le paiement est maintenant attendu. Vous serez prévenu dès qu'il sera reçu.</p>
-       ${button(`${process.env.FRONTEND_URL}/devis/${d.id}`, 'Voir le devis')}`),
+       ${button(`${front()}/devis/${d.id}`, 'Voir le devis')}`),
   });
 }
 
@@ -98,7 +99,7 @@ async function notifyPaid(devisId) {
     subject: `Paiement reçu — ${fmtEUR(d.montant_ttc)}`,
     html: layout('Paiement reçu',
       `<p>${esc(d.client_nom || 'Votre client')} a payé <strong>${fmtEUR(d.montant_ttc)}</strong> pour « ${esc(d.description)} ».</p>
-       ${button(`${process.env.FRONTEND_URL}/devis/${d.id}`, 'Voir le détail')}`),
+       ${button(`${front()}/devis/${d.id}`, 'Voir le détail')}`),
     attachments,
   });
 }

@@ -6,6 +6,7 @@ const { syncAccount } = require('../lib/stripeSync');
 const meetch = require('../lib/meetch');
 const router  = express.Router();
 
+const front = require('../lib/front');
 const COMMISSION_PCT = 0.01; // 1% Joseph
 
 // POST /api/stripe/onboard — onboarding Stripe Connect Express pour un pro
@@ -28,8 +29,8 @@ router.post('/onboard', verifyJWT, async (req, res) => {
 
     const link = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${process.env.FRONTEND_URL}/?stripe=refresh`,
-      return_url:  `${process.env.FRONTEND_URL}/?stripe=ok`,
+      refresh_url: `${front()}/?stripe=refresh`,
+      return_url:  `${front()}/?stripe=ok`,
       type: 'account_onboarding',
     });
     res.json({ url: link.url });

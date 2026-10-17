@@ -14,7 +14,9 @@ runMigrations().catch(e => console.error('[migrate] erreur:', e.message));
 app.set('trust proxy', 1);
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
+// FRONTEND_URL peut lister plusieurs origines séparées par des virgules (ex. https://finalise.fr,https://finalise.vercel.app)
+const ORIGINS = (process.env.FRONTEND_URL || '').split(',').map(s => s.trim()).filter(Boolean);
+app.use(cors({ origin: ORIGINS.length ? ORIGINS : '*' }));
 
 // Webhook Stripe doit recevoir le body RAW — monter AVANT express.json() (et avant les limiteurs)
 app.post('/api/stripe/webhook',
